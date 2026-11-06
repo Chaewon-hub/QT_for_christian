@@ -5,6 +5,7 @@ import { createStore } from './store.js';
 import { renderForm, markOverflows } from './form.js';
 import { buildPages, esc, PX_PER_MM } from './sheet.js';
 import { createImageStore, fileToPhoto } from './images.js';
+import { photoIdsOf } from './richbody.js';
 import { sheepSVG } from './sheep.js';
 import { savePdf } from './pdf.js';
 
@@ -157,6 +158,11 @@ let editor = null; // { note, persisted, sheetEl, timers }
 
 function leaveEditor() {
   if (!editor) return;
+  if (editor.note.type === 'free' && editor.added.size) {
+    const keep = new Set(photoIdsOf(editor.note.fields.body));
+    const orphans = [...editor.added].filter(id => !keep.has(id)); // 키보드로 지운 사진 등
+    if (orphans.length) images.remove(orphans);
+  }
   clearTimeout(editor.saveTimer); clearTimeout(editor.renderTimer);
   if (editor.dirty) saveNow();
   editor.ro?.disconnect();
@@ -200,7 +206,6 @@ function renderPreview() {
   const badge = $('[data-testid=page-count]', app);
   badge.textContent = t(lang(), 'status.pages', { n: editor.pageCount });
   badge.classList.toggle('multi', editor.pageCount > 1);
-  if (editor.note.type === 'free') decoratePhotos(list);
   fitPreview();
 }
 
@@ -269,7 +274,7 @@ async function doPdf(btn) {
 function viewEditor(note, persisted) {
   leaveEditor();
   note = normalizeNote(note);
-  editor = { note, persisted, dirty: false };
+  editor = { note, persisted, dirty: false, added: new Set() };
   app.innerHTML = `<div class="editor">
     <div class="ed-top">
       <header class="topbar ed">
@@ -290,12 +295,14 @@ function viewEditor(note, persisted) {
       <aside class="preview-col" data-testid="preview" aria-label="${L('preview.title')}">
         <div class="pv-head"><span>${L('preview.title')}</span>
           ${note.type === 'free' ? `<span class="pv-tools">
-            <button type="button" class="btn small" data-act="add-photo">📷 ${L('btn.addPhoto')}</button>
-            <button type="button" class="btn small ghost" data-testid="btn-add-page">${L('btn.addPage')}</button>
-            <button type="button" class="btn small ghost" data-testid="btn-remove-page" ${note.extraPages ? '' : 'disabled'}>${L('btn.removePage')}</button>
+            <button type="button" class="btn small ghost" data-testid="pv-add-page" data-page="add">${L('btn.addPage')}</button>
+            <button type="button" class="btn small ghost" data-testid="pv-remove-page" data-page="remove">${L('btn.removePage')}</button>
           </span>` : ''}
+          <span class="pv-actions">
+            <button type="button" class="btn small ghost" data-testid="pv-print">🖨 ${L('btn.print')}</button>
+            <button type="button" class="btn small primary" data-testid="pv-pdf">⬇ ${L('btn.pdf')}</button>
+          </span>
           <button type="button" class="btn ghost" data-testid="btn-preview-close">✕ ${L('btn.close')}</button></div>
-        ${note.type === 'free' ? `<p class="pv-hint">${L('photo.hint')}</p>` : ''}
         <div class="pv-pages"></div>
       </aside>
     </div>
@@ -303,8 +310,15 @@ function viewEditor(note, persisted) {
   </div>`;
   const form = renderForm(note, {
     lang: lang(),
+    rich: note.type === 'free' ? {
+      imageSrc: images.src,
+      labels: { up: t(lang(), 'photo.up'), down: t(lang(), 'photo.down'), del: t(lang(), 'btn.delete') },
+      addFiles: addPhotoFiles,
+      onDelete: id => images.remove([id]),
+      confirm: () => confirmDialog(t(lang(), 'confirm.deletePhoto'), { okLabel: t(lang(), 'btn.delete'), danger: true }),
+    } : null,
     onChange: updated => {
-      editor.note = { ...updated, images: editor.note.images, extraPages: editor.note.extraPages };
+      editor.note = { ...updated, extraPages: editor.note.extraPages }; // 쪽 수는 폼 밖(쪽 추가 버튼)에서 관리
       editor.dirty = true;
       clearTimeout(editor.renderTimer); editor.renderTimer = setTimeout(renderPreview, 120);
       clearTimeout(editor.saveTimer); editor.saveTimer = setTimeout(saveNow, 600);
@@ -312,15 +326,19 @@ function viewEditor(note, persisted) {
     },
   });
   $('.form-col', app).appendChild(form);
-  if (note.type === 'free') { $('.form-col', app).insertAdjacentHTML('beforeend', '<section class="card photo-card"></section>'); renderPhotoCard(); setupPhotoEditing(); }
+  editor.form = form;
+  if (note.type === 'free') setupFreeNote();
   $('[data-testid=btn-pdf]', app).onclick = e => doPdf(e.currentTarget);
   $('[data-testid=btn-print]', app).onclick = doPrint;
+  // 미리보기 화면 안에서도 바로 인쇄·PDF 저장 (미리보기가 화면을 덮어 아래 버튼이 가려지므로)
+  $('[data-testid=pv-pdf]', app).onclick = e => doPdf(e.currentTarget);
+  $('[data-testid=pv-print]', app).onclick = doPrint;
   $('[data-testid=btn-preview]', app).onclick = openPreview;
   $('[data-testid=btn-preview-close]', app).onclick = () => document.body.classList.remove('pv-open');
   $('[data-testid=btn-delete]', app).onclick = async () => {
     if (await confirmDialog(t(lang(), 'confirm.delete'), { okLabel: t(lang(), 'btn.delete'), danger: true })) {
       store.deleteNote(editor.note.id);
-      images.remove(editor.note.images.map(p => p.id));
+      images.remove(photoIdsOf(editor.note.fields.body));
       editor.dirty = false;
       leaveEditor();
       location.hash = '#/';
@@ -331,7 +349,8 @@ function viewEditor(note, persisted) {
   setStatus();
   renderPreview();
   document.fonts.ready.then(() => { if (editor) renderPreview(); });
-  if (note.images.length) images.load(note.images.map(p => p.id)).then(() => { if (editor) { renderPreview(); renderPhotoCard(); } });
+  const ids = note.type === 'free' ? photoIdsOf(note.fields.body) : [];
+  if (ids.length) images.load(ids).then(() => { if (editor) { editor.form.richApi?.refreshImages(images.src); renderPreview(); } });
 }
 
 function openPreview() {
@@ -340,175 +359,48 @@ function openPreview() {
   requestAnimationFrame(fitPreview);
 }
 
-/* ---------- 자유 노트 사진 ---------- */
-function photoChanged({ now = false } = {}) {
-  editor.dirty = true;
-  clearTimeout(editor.saveTimer); editor.saveTimer = setTimeout(saveNow, 600);
-  setStatus();
-  clearTimeout(editor.renderTimer);
-  if (now) renderPreview(); else editor.renderTimer = setTimeout(renderPreview, 60);
-  renderPhotoCard();
-  const rm = $('[data-testid=btn-remove-page]', app);
-  if (rm) rm.disabled = !editor.note.extraPages;
-}
-
-function renderPhotoCard() {
-  const card = $('.photo-card', app);
-  if (!card || !editor) return;
-  const list = editor.note.images;
-  card.innerHTML = `<h3>${L('form.photos')}${list.length ? ` <small>${L('photo.count', { n: list.length })}</small>` : ''}</h3>
-    <p class="guide">${L('photo.hint')}</p>
-    ${list.length ? `<div class="thumbs">${list.map(p => {
-      const src = images.src(p.id);
-      return `<div class="thumb" data-testid="photo-thumb">${src ? `<img src="${esc(src)}" alt="">` : ''}
-        <button type="button" class="thumb-del" data-del="${esc(p.id)}" aria-label="${L('btn.delete')}">✕</button></div>`;
-    }).join('')}</div>` : ''}
-    <div class="photo-actions">
-      <button type="button" class="btn primary" data-act="add-photo">📷 ${L('btn.addPhoto')}</button>
-      ${list.length ? `<button type="button" class="btn ghost" data-act="arrange">${L('btn.arrange')}</button>` : ''}
-    </div>`;
-}
-
-async function addPhotos(files) {
-  let added = 0;
+/* ---------- 자유 노트: 사진(내용 칸에서 넣기) · 쪽 추가 ---------- */
+async function addPhotoFiles(files) {
+  const out = [];
   for (const file of files) {
     try {
       const { dataUrl, ratio } = await fileToPhoto(file);
       const id = 'ph' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       await images.put(id, dataUrl);
-      const w = ratio > 1.2 ? 70 : 100;
-      editor.note.images.push({ id, page: Math.max(0, (editor.pageCount || 1) - 1), x: (182 - w) / 2, y: 30 + added * 12, w, ratio });
-      editor.selected = id;
-      added++;
+      editor?.added.add(id);
+      out.push({ id, ratio, src: dataUrl });
     } catch (e) {
       console.warn(e);
       toast(t(lang(), 'photo.fail'), 5000);
     }
   }
-  if (!added) return;
-  photoChanged({ now: true });
-  openPreview();
-  requestAnimationFrame(() => $(`.pv-pages .photo[data-img="${editor.selected}"]`, app)?.scrollIntoView({ block: 'center' }));
+  return out;
 }
 
-async function deletePhoto(id) {
-  if (!(await confirmDialog(t(lang(), 'confirm.deletePhoto'), { okLabel: t(lang(), 'btn.delete'), danger: true }))) return;
-  editor.note.images = editor.note.images.filter(p => p.id !== id);
-  if (editor.selected === id) editor.selected = null;
-  await images.remove([id]);
-  photoChanged({ now: true });
+function pagesChanged() {
+  editor.dirty = true;
+  clearTimeout(editor.saveTimer); editor.saveTimer = setTimeout(saveNow, 600);
+  setStatus();
+  renderPreview();
+  updatePageButtons();
 }
 
-function movePhotoPage(id, delta) {
-  const p = editor.note.images.find(x => x.id === id);
-  if (!p) return;
-  p.page = Math.min(Math.max(0, Math.min(p.page, editor.pageCount - 1) + delta), editor.pageCount - 1);
-  photoChanged({ now: true });
-  $(`.pv-pages .photo[data-img="${id}"]`, app)?.scrollIntoView({ block: 'center' });
+function updatePageButtons() {
+  app.querySelectorAll('[data-page="remove"]').forEach(b => { b.disabled = !editor.note.extraPages; });
 }
 
-// 선택한 사진에만 도구(쪽 이동·빼기)와 크기 조절 손잡이를 붙인다.
-function decoratePhotos(list) {
-  for (const el of list.querySelectorAll('.photo')) {
-    el.classList.add('editable');
-    if (el.dataset.img !== editor.selected) continue;
-    el.classList.add('selected');
-    el.insertAdjacentHTML('beforeend', `<div class="ph-tools">
-        <button type="button" data-act="prev" data-testid="photo-prev-page">↑ ${L('photo.prev')}</button>
-        <button type="button" data-act="next" data-testid="photo-next-page">↓ ${L('photo.next')}</button>
-        <button type="button" data-act="del" data-testid="photo-delete" aria-label="${L('btn.delete')}">✕</button>
-      </div><div class="ph-resize" data-testid="photo-resize" aria-hidden="true"></div>`);
-  }
-}
-
-function setupPhotoEditing() {
+function setupFreeNote() {
   const input = $('[data-testid=photo-input]', app);
-  const pv = $('.preview-col', app), list = $('.pv-pages', app);
-  input.onchange = () => { const files = [...input.files]; input.value = ''; if (files.length) addPhotos(files); };
+  input.onchange = () => { const files = [...input.files]; input.value = ''; if (files.length) editor.form.richApi.insertAtCaret(files); };
+  $('[data-rich-add]', app).onclick = () => input.click();
   $('.editor', app).addEventListener('click', e => {
-    const b = e.target.closest('[data-act], [data-del]');
+    const b = e.target.closest('[data-page]');
     if (!b || !editor) return;
-    if (b.dataset.del) return deletePhoto(b.dataset.del);
-    const act = b.dataset.act, id = b.closest('.photo')?.dataset.img;
-    if (act === 'add-photo') input.click();
-    else if (act === 'arrange') openPreview();
-    else if (act === 'prev' || act === 'next') movePhotoPage(id, act === 'prev' ? -1 : 1);
-    else if (act === 'del') deletePhoto(id);
+    if (b.dataset.page === 'add') editor.note.extraPages = (editor.note.extraPages || 0) + 1;
+    else if (editor.note.extraPages) editor.note.extraPages--;
+    pagesChanged();
   });
-  $('[data-testid=btn-add-page]', app).onclick = () => { editor.note.extraPages = (editor.note.extraPages || 0) + 1; photoChanged({ now: true }); };
-  $('[data-testid=btn-remove-page]', app).onclick = () => {
-    if (!editor.note.extraPages) return;
-    editor.note.extraPages--;
-    const last = Math.max(0, editor.pageCount - 2);
-    for (const p of editor.note.images) if (p.page > last) p.page = last; // 빼는 장의 사진은 앞 장으로
-    photoChanged({ now: true });
-  };
-
-  let drag = null;
-  const bodyOf = el => el.closest('.body');
-  const wrapOf = el => el.closest('.pv-page');
-  list.addEventListener('pointerdown', e => {
-    if (!editor || e.button > 0 || e.target.closest('.ph-tools')) return;
-    const el = e.target.closest('.photo');
-    if (!el) {
-      if (editor.selected) { editor.selected = null; renderPreview(); }
-      return;
-    }
-    e.preventDefault();
-    if (editor.selected !== el.dataset.img) {
-      editor.selected = el.dataset.img;
-      list.querySelectorAll('.photo.selected').forEach(p => { p.classList.remove('selected'); p.querySelector('.ph-tools')?.remove(); p.querySelector('.ph-resize')?.remove(); });
-      el.classList.add('selected');
-      decoratePhotos(list);
-    }
-    const r = el.getBoundingClientRect(), s = +wrapOf(el).dataset.scale || 1;
-    const ph = editor.note.images.find(p => p.id === el.dataset.img);
-    drag = { el, ph, s, mode: e.target.closest('.ph-resize') ? 'resize' : 'move', moved: false, x0: e.clientX, y0: e.clientY,
-      grabX: (e.clientX - r.left) / s / PX_PER_MM, grabY: (e.clientY - r.top) / s / PX_PER_MM };
-    el.setPointerCapture?.(e.pointerId);
-  });
-  list.addEventListener('pointermove', e => {
-    if (!drag) return;
-    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return;
-    drag.moved = true;
-    const { el, ph } = drag;
-    if (drag.mode === 'move') {
-      // 손가락이 다른 장 위로 가면 그 장으로 옮긴다
-      for (const w of list.children) {
-        const wr = w.getBoundingClientRect();
-        if (e.clientY >= wr.top && e.clientY <= wr.bottom) { const b = w.querySelector('.body'); if (b && bodyOf(el) !== b) b.appendChild(el); break; }
-      }
-      const body = bodyOf(el), s = +wrapOf(el).dataset.scale || 1, br = body.getBoundingClientRect();
-      const bw = body.clientWidth / PX_PER_MM, bh = body.clientHeight / PX_PER_MM;
-      const w = parseFloat(el.style.width), h = w * ph.ratio;
-      const x = Math.min(Math.max(0, (e.clientX - br.left) / s / PX_PER_MM - drag.grabX), Math.max(0, bw - w));
-      const y = Math.min(Math.max(0, (e.clientY - br.top) / s / PX_PER_MM - drag.grabY), Math.max(0, bh - h));
-      el.style.left = `${x}mm`; el.style.top = `${y}mm`;
-    } else {
-      const body = bodyOf(el), s = drag.s, r = el.getBoundingClientRect();
-      const bw = body.clientWidth / PX_PER_MM, bh = body.clientHeight / PX_PER_MM;
-      const x = parseFloat(el.style.left), y = parseFloat(el.style.top);
-      const maxW = Math.max(20, Math.min(bw - x, (bh - y) / ph.ratio));
-      const w = Math.min(Math.max(20, (e.clientX - r.left) / s / PX_PER_MM), maxW);
-      el.style.width = `${w}mm`; el.style.height = `${w * ph.ratio}mm`;
-    }
-    // 화면 끝 가까이 끌면 미리보기를 스크롤
-    const pr = pv.getBoundingClientRect();
-    if (e.clientY < pr.top + 70) pv.scrollTop -= 14; else if (e.clientY > pr.bottom - 70) pv.scrollTop += 14;
-  });
-  const end = () => {
-    if (!drag) return;
-    const { el, moved } = drag;
-    drag = null;
-    if (!moved || !editor) return;
-    const ph = editor.note.images.find(p => p.id === el.dataset.img);
-    if (!ph) return;
-    ph.page = [...list.children].indexOf(wrapOf(el));
-    ph.x = parseFloat(el.style.left); ph.y = parseFloat(el.style.top); ph.w = parseFloat(el.style.width);
-    photoChanged();
-  };
-  list.addEventListener('pointerup', end);
-  list.addEventListener('pointercancel', end);
+  updatePageButtons();
 }
 
 /* ---------- 라우팅 ---------- */

@@ -1,3 +1,4 @@
+import { photoToken } from './richbody.js';
 // 노트 3종의 칸 정의. 폼(form.js)과 A4 시트(sheet.js)가 모두 이 정의를 따른다.
 // kind: line(한 줄, 넘치면 경고) | lines(여러 줄: lines=최소 줄 수, 'auto'면 남는 공간을 채움(min=최소). 넘치면 칸이 늘어나고 다음 장으로 이어짐)
 //       | checklist(체크+한 줄 × items) | checks(복수 선택)
@@ -52,7 +53,7 @@ export const SCHEMAS = {
     sections: [
       { id: 'main', labelKey: 'sec.freeMain', fields: [
         { id: 'title', kind: 'line', labelKey: 'field.title' },
-        { id: 'body', kind: 'lines', lines: 'auto', min: 1, rows: 12, labelKey: 'form.body' },
+        { id: 'body', kind: 'rich', labelKey: 'form.body' }, // 글 + 사진 (richbody.js 형식)
       ] },
     ],
   },
@@ -96,22 +97,14 @@ export function normalizeNote(note) {
       fields[f.id] = Array.isArray(fields[f.id]) ? fields[f.id].filter(v => f.options.some(o => o.id === v)) : [];
     } else fields[f.id] = String(fields[f.id] ?? '');
   }
-  return { ...note, fields, images: normalizeImages(note.images), extraPages: Math.max(0, Math.floor(+note.extraPages || 0)) };
-}
-
-// 자유 노트의 사진 배치: { id, page(0부터), x·y·w(mm, 본문 영역 기준), ratio(높이/너비) }
-export const PHOTO_MIN_W = 20, PHOTO_MAX_W = 182;
-const num = (v, d = 0) => (Number.isFinite(+v) && v !== null && v !== '' ? +v : d);
-export function normalizeImages(list) {
-  if (!Array.isArray(list)) return [];
-  return list.filter(p => p && typeof p.id === 'string' && p.id).map(p => ({
-    id: p.id,
-    page: Math.max(0, Math.floor(num(p.page))),
-    x: Math.max(0, num(p.x)),
-    y: Math.max(0, num(p.y)),
-    w: Math.min(PHOTO_MAX_W, Math.max(PHOTO_MIN_W, num(p.w, 100))),
-    ratio: num(p.ratio, 0.75) > 0 ? num(p.ratio, 0.75) : 0.75,
-  }));
+  const { images, ...rest } = note;
+  // v1.2에서 장 위에 붙였던 사진은 '내용' 끝에 사진 줄로 옮긴다 (너비 mm → 본문 폭 182mm 대비 %)
+  const old = Array.isArray(images) ? images.filter(p => p && typeof p.id === 'string' && p.id) : [];
+  if (note.type === 'free' && old.length) {
+    const lines = old.map(p => photoToken({ id: p.id, w: ((+p.w || 100) / 182) * 100, ratio: +p.ratio > 0 ? +p.ratio : 0.75 }));
+    fields.body = [fields.body, ...lines].filter((x, i) => i > 0 || x).join('\n');
+  }
+  return { ...rest, fields, extraPages: Math.max(0, Math.floor(+note.extraPages || 0)) };
 }
 
 export function summarize(note, max = 40) {

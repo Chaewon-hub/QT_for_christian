@@ -3,6 +3,7 @@
 import { SCHEMAS, weekdayIndex } from './schema.js';
 import { t, HTML_LANG } from './i18n.js';
 import { sheepSVG, palette } from './sheep.js';
+import { parseBody } from './richbody.js';
 
 export const LINE_MM = 8;
 const LH = (LINE_MM * 96) / 25.4; // 8mm를 CSS px로
@@ -78,7 +79,7 @@ function toEl(html) {
 }
 
 /* ---------- 노트 종류별 블록 ---------- */
-function blocksFor(note, c, ink) {
+function blocksFor(note, c, ink, imageSrc) {
   const F = id => note.fields?.[id];
   const txt = (field, cls) => ({ field, text: String(F(field) ?? ''), cls });
   const chk = field => ({ field, items: (F(field) || []).map(x => ({ ...x })) });
@@ -127,9 +128,21 @@ function blocksFor(note, c, ink) {
     ];
   }
 
+  // 자유 노트: 글 줄과 사진을 '내용'에 적힌 순서대로. 사진은 줄 칸 위에 붙인 모양(사진 높이만큼 줄 수를 잡음)
+  const BODY_W = 182, MAX_H = 220;
+  const segs = parseBody(F('body')).map(seg => {
+    if (seg.type === 'text') return { type: 'single', min: 1, cls: 'margin', cols: [{ field: 'body', text: seg.text }] };
+    let w = (BODY_W * seg.w) / 100, h = w * seg.ratio;
+    if (h > MAX_H) { h = MAX_H; w = h / seg.ratio; }
+    const n = Math.ceil((h + 2) / LINE_MM);
+    const src = imageSrc(seg.id);
+    return { type: 'fixed', html: `<div class="lines margin pblk" style="height:${n * LINE_MM}mm">${'<div class="ln"></div>'.repeat(n)}` +
+      `<div class="photo" data-testid="photo" data-img="${esc(seg.id)}" style="width:${w.toFixed(2)}mm;height:${h.toFixed(2)}mm">` +
+      (src ? `<img src="${esc(src)}" alt="" draggable="false">` : '<div class="ph-missing"></div>') + `</div></div>` };
+  });
   return [
     { type: 'fixed', html: `<div class="info topic"><div class="k last">${c.L('field.title')}</div><div class="last v one" data-field="title">${esc(F('title'))}</div></div>` },
-    { type: 'single', auto: true, min: 1, cls: 'margin', cols: [txt('body')] },
+    ...segs,
   ];
 }
 
@@ -252,9 +265,22 @@ export function buildPages(note, { theme = 'a', lang = 'ko', print = false, imag
 
   const pages = [];
   let body = null, placed = [];
+  const isFree = note.type === 'free';
   const finishPage = () => {
     if (!body) return;
-    const auto = placed.filter(p => p.b.auto).pop();
+    let auto = placed.filter(p => p.b.auto).pop();
+    if (isFree) {
+      // 자유 노트: 마지막 블록이 글이면 그 줄을 늘리고, 사진이면 아래에 빈 줄을 채운다 (공책처럼 장 끝까지 줄)
+      const last = placed[placed.length - 1];
+      auto = last && last.b.type === 'single' ? last : null;
+      if (!auto && body.lastElementChild) {
+        const b = { type: 'single', min: 0, cls: 'margin', cols: [{ field: 'body', text: '' }] };
+        const el = toEl(blockHTML(b, 0));
+        body.appendChild(el);
+        auto = { b, n: 0, el };
+        placed.push(auto);
+      }
+    }
     if (auto) {
       const last = body.lastElementChild;
       const extra = Math.floor((bottomOf(body) - bottomOf(last) - 0.5) / LH);
@@ -275,7 +301,7 @@ export function buildPages(note, { theme = 'a', lang = 'ko', print = false, imag
   };
 
   newPage();
-  const queue = blocksFor(note, c, ink);
+  const queue = blocksFor(note, c, ink, imageSrc);
   for (let guard = 0; queue.length && guard < 400; guard++) {
     const b = queue.shift();
     b.atTop = body.children.length === 0;
@@ -307,13 +333,12 @@ export function buildPages(note, { theme = 'a', lang = 'ko', print = false, imag
     // '+ 쪽 추가'로 늘린 빈 장 (줄만 있는 장)
     for (let i = 0; i < (note.extraPages || 0); i++) {
       newPage();
-      const b = { type: 'single', auto: true, min: 1, cls: 'margin', cols: [{ field: 'body', text: '' }] };
+      const b = { type: 'single', min: 1, cls: 'margin', cols: [{ field: 'body', text: '' }] };
       const el = toEl(blockHTML(b, 1));
       body.appendChild(el);
       placed.push({ b, n: 1, el });
     }
     finishPage();
-    placePhotos(pages, note.images || [], imageSrc);
   }
 
   if (pages.length > 1) pages.forEach((p, i) => { p.querySelector('footer .pg').textContent = `${i + 1} / ${pages.length}`; });
@@ -322,26 +347,7 @@ export function buildPages(note, { theme = 'a', lang = 'ko', print = false, imag
   return { pages, overflows: [...overflows], dispose: () => host.remove() };
 }
 
-// 사진을 본문 영역 기준 mm 좌표로 붙인다. 장 밖으로 나가지 않게 위치·크기를 맞춘다.
 export const PX_PER_MM = 96 / 25.4;
-function placePhotos(pages, photos, imageSrc) {
-  for (const ph of photos) {
-    const body = pages[Math.min(ph.page, pages.length - 1)].querySelector('.body');
-    const bw = body.clientWidth / PX_PER_MM, bh = body.clientHeight / PX_PER_MM;
-    let w = Math.min(ph.w, bw);
-    if (w * ph.ratio > bh) w = bh / ph.ratio;
-    const h = w * ph.ratio;
-    const x = Math.min(ph.x, Math.max(0, bw - w)), y = Math.min(ph.y, Math.max(0, bh - h));
-    const el = document.createElement('div');
-    el.className = 'photo';
-    el.dataset.img = ph.id;
-    el.setAttribute('data-testid', 'photo');
-    el.style.cssText = `left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;width:${w.toFixed(2)}mm;height:${h.toFixed(2)}mm`;
-    const src = imageSrc(ph.id);
-    el.innerHTML = src ? `<img src="${esc(src)}" alt="" draggable="false">` : '<div class="ph-missing"></div>';
-    body.appendChild(el);
-  }
-}
 
 // 한 줄 칸(.one)이 넘쳤는지: 여러 줄 칸은 늘어나므로 넘치지 않는다.
 function collectOneLineOverflows(sheetEl) {

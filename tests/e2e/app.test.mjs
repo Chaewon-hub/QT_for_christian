@@ -170,81 +170,119 @@ test('PC: the preview appears only after pressing the button', T, async () => {
   await ctx.close();
 });
 
-test('free note photos: add, drag, resize, move to another page, keep after reload, print and PDF, delete', T, async () => {
+test('free note photos go into the content box: button at the cursor, file drop at the pointer, resize, move, keep, print, delete', T, async () => {
   const { ctx, page, errors } = await open();
   await page.getByTestId('new-free').click();
-  await page.locator('[name="title"]').fill('사진 노트');
+  const rich = page.getByTestId('rich-body');
+  const figs = rich.getByTestId('rich-photo');
+  const layout = () => rich.evaluate(r => [...r.children].map(c => (c.matches('[data-testid=rich-photo]') ? 'P' : c.textContent.trim())).filter(Boolean).join('|'));
+  // 1) 버튼: 커서 위치(첫 줄 다음)에 들어가고, 이어서 쓰면 사진 뒤에 써진다
+  await rich.click();
+  await page.keyboard.type('BEFORELINE');
+  await page.keyboard.press('Enter');
   await page.getByTestId('photo-input').setInputFiles(path.join(ROOT, 'assets/icons/icon-512.png'));
-  await page.getByTestId('preview').waitFor({ state: 'visible' }); // 사진을 넣으면 배치할 수 있게 미리보기가 열린다
-  const photo = page.getByTestId('preview').getByTestId('photo');
-  await photo.waitFor();
-  await settle(page); // 미리보기가 옆에서 밀려 들어오는 동안(0.2초)은 위치가 움직이므로 기다린다
-  assert.equal(await photo.count(), 1);
-  assert.equal(await page.getByTestId('photo-thumb').count(), 1, 'thumbnail in the form');
-  // 끌어서 옮기기
-  const b0 = await photo.boundingBox();
-  await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(b0.x + b0.width / 2 + 80, b0.y + b0.height / 2 + 120, { steps: 8 });
-  await page.mouse.up();
+  await figs.first().waitFor();
+  await page.keyboard.type('AFTERLINE');
   await settle(page);
-  const b1 = await photo.boundingBox();
-  assert.ok(b1.x > b0.x + 40 && b1.y > b0.y + 60, `moved (${b0.x},${b0.y}) -> (${b1.x},${b1.y})`);
-  // 모서리를 끌어 크기 바꾸기 (비율 유지)
-  const hb = await page.getByTestId('photo-resize').boundingBox();
+  assert.equal(await layout(), 'BEFORELINE|P|AFTERLINE');
+  const order = await page.getByTestId('preview').evaluate(pv => {
+    const h = pv.querySelector('.sheet').innerHTML;
+    return [h.indexOf('BEFORELINE'), h.indexOf('data-testid="photo"'), h.indexOf('AFTERLINE')];
+  });
+  assert.ok(order[0] >= 0 && order[0] < order[1] && order[1] < order[2], `sheet order ${order}`);
+  // 2) 파일을 첫 줄 맨 앞에 끌어다 놓으면 그 자리에 들어간다
+  const line = await rich.locator('div', { hasText: 'BEFORELINE' }).first().boundingBox();
+  await page.evaluate(async ({ x, y }) => {
+    const blob = await (await fetch('assets/icons/icon-192.png')).blob();
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'drop.png', { type: 'image/png' }));
+    const el = document.querySelector('[data-testid=rich-body]');
+    for (const type of ['dragenter', 'dragover', 'drop']) el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  }, { x: line.x + 1, y: line.y + line.height / 2 });
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid=rich-body] [data-testid=rich-photo]').length === 2);
+  await settle(page);
+  assert.equal(await layout(), 'P|BEFORELINE|P|AFTERLINE');
+  // 3) 모서리를 끌어 크기 줄이기 → 미리보기에도 반영
+  const fig2 = figs.nth(1);
+  await fig2.click();
+  const w0 = (await fig2.boundingBox()).width;
+  const hb = await fig2.getByTestId('rich-photo-resize').boundingBox();
   await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
   await page.mouse.down();
-  await page.mouse.move(hb.x + hb.width / 2 + 60, hb.y + hb.height / 2 + 60, { steps: 6 });
+  await page.mouse.move(hb.x - 160, hb.y + hb.height / 2, { steps: 8 });
   await page.mouse.up();
   await settle(page);
-  const b2 = await photo.boundingBox();
-  assert.ok(b2.width > b1.width + 20, `resized ${b1.width} -> ${b2.width}`);
-  assert.ok(Math.abs(b2.width / b2.height - b1.width / b1.height) < 0.05, 'aspect ratio kept');
-  // 쪽 추가 → 다음 쪽으로 옮기기
-  await page.getByTestId('btn-add-page').click();
+  const w1 = (await fig2.boundingBox()).width;
+  assert.ok(w1 < w0 - 80, `shrunk ${w0} -> ${w1}`);
+  const sheetW = await page.getByTestId('preview').getByTestId('photo').evaluateAll(ps => ps.map(p => p.getBoundingClientRect().width));
+  assert.ok(sheetW.length === 2 && sheetW[1] < sheetW[0] - 10, `sheet widths ${sheetW}`);
+  // 4) ↓ 버튼으로 첫 사진을 한 칸 아래로
+  await figs.nth(0).click();
+  await figs.nth(0).getByTestId('rich-photo-down').click();
   await settle(page);
-  assert.equal(await sheets(page).count(), 2);
-  await photo.click();
-  await page.getByTestId('photo-next-page').click();
-  await settle(page);
-  assert.equal(await sheets(page).nth(1).getByTestId('photo').count(), 1, 'photo is on page 2');
-  // 새로고침 후에도 그대로
+  assert.equal(await layout(), 'BEFORELINE|P|P|AFTERLINE');
+  // 5) 새로고침 후에도 그대로 (사진 데이터 포함)
   await page.getByTestId('save-status').filter({ hasText: /저장됨/ }).waitFor();
   await page.reload();
-  await page.getByTestId('btn-preview').click();
-  await page.getByTestId('preview').waitFor({ state: 'visible' });
+  await figs.first().waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid=rich-body] [data-testid=rich-photo] img')].every(i => i.complete && i.naturalWidth > 0));
+  assert.equal(await layout(), 'BEFORELINE|P|P|AFTERLINE');
+  // 6) 쪽 추가
   await settle(page);
-  assert.equal(await sheets(page).count(), 2);
-  assert.equal(await sheets(page).nth(1).getByTestId('photo').count(), 1, 'kept after reload');
-  assert.ok(await sheets(page).nth(1).locator('[data-testid="photo"] img').evaluate(i => i.complete && i.naturalWidth > 0), 'image data restored');
-  await page.getByTestId('btn-preview-close').click();
-  // 인쇄: 2쪽, 사진이 실제 이미지로 들어감
+  const before = await sheets(page).count();
+  await page.getByTestId('btn-add-page').click();
+  await settle(page);
+  assert.equal(await sheets(page).count(), before + 1);
+  // 7) 인쇄에 사진 2장이 들어가고, PDF도 같은 쪽수
   await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
   await page.getByTestId('btn-print').click();
   await page.waitForFunction(() => window.__printed === true, null, { timeout: 10_000 });
   const pfile = path.join(TMP, 'photo-print.pdf');
   await page.pdf({ path: pfile, preferCSSPageSize: true, printBackground: true });
-  assert.equal(pdfPages(pfile), 2);
-  const imgs = execFileSync('pdfimages', ['-list', pfile]).toString().trim().split('\n').slice(2);
-  assert.ok(imgs.some(l => /^\s*2\s/.test(l)), 'an image is placed on page 2 of the print');
-  // PDF 다운로드도 2쪽
+  assert.equal(pdfPages(pfile), before + 1);
+  const imgs = execFileSync('pdfimages', ['-list', pfile]).toString().trim().split('\n').slice(2).filter(l => /image/.test(l));
+  assert.ok(imgs.length >= 2, `images in print: ${imgs.length}`);
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 90_000 }), page.getByTestId('btn-pdf').click()]);
   const dfile = path.join(TMP, 'photo-dl.pdf');
   await dl.saveAs(dfile);
-  assert.equal(pdfPages(dfile), 2);
-  // 사진 빼기 → 빈 쪽 빼기
+  assert.equal(pdfPages(dfile), before + 1);
+  // 8) 미리보기에는 편집 도구가 없다 (보기 전용)
+  await page.getByTestId('btn-preview').click();
+  await page.getByTestId('preview').waitFor({ state: 'visible' });
+  assert.equal(await page.getByTestId('preview').getByTestId('photo').count(), 2);
+  assert.equal(await page.getByTestId('preview').locator('[data-testid^="rich-photo"], [data-testid="photo-resize"]').count(), 0);
+  await page.getByTestId('btn-preview-close').click();
+  await page.getByTestId('preview').waitFor({ state: 'hidden' });
+  // 9) ✕로 사진 빼기, 빈 쪽 빼기
+  await figs.nth(0).click();
+  await figs.nth(0).getByTestId('rich-photo-delete').click();
+  await page.getByTestId('confirm-ok').click();
+  await settle(page);
+  assert.equal(await figs.count(), 1);
+  assert.equal(await page.getByTestId('preview').getByTestId('photo').count(), 1);
+  const withExtra = await sheets(page).count(); // 사진이 빠져 글 분량이 줄었으므로 다시 센다
+  await page.getByTestId('btn-remove-page').click();
+  await settle(page);
+  assert.equal(await sheets(page).count(), withExtra - 1);
+  assert.ok(await page.getByTestId('btn-remove-page').isDisabled(), 'no extra page left to remove');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the preview screen has its own print and PDF buttons', T, async () => {
+  const { ctx, page, errors } = await open();
+  await page.getByTestId('new-devotion').click();
+  await page.locator('[name="thanks"]').fill('미리보기에서 바로 저장');
   await page.getByTestId('btn-preview').click();
   await page.getByTestId('preview').waitFor({ state: 'visible' });
   await settle(page);
-  await photo.click();
-  await page.getByTestId('photo-delete').click();
-  await page.getByTestId('confirm-ok').click();
-  await settle(page);
-  assert.equal(await photo.count(), 0);
-  assert.equal(await page.getByTestId('photo-thumb').count(), 0);
-  await page.getByTestId('btn-remove-page').click();
-  await settle(page);
-  assert.equal(await sheets(page).count(), 1);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.getByTestId('pv-pdf').click()]);
+  const file = path.join(TMP, 'pv.pdf');
+  await dl.saveAs(file);
+  assert.equal(pdfPages(file), 1);
+  await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
+  await page.getByTestId('pv-print').click();
+  await page.waitForFunction(() => window.__printed === true, null, { timeout: 10_000 });
   assert.deepEqual(errors, []);
   await ctx.close();
 });

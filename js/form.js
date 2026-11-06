@@ -2,14 +2,15 @@
 import { SCHEMAS } from './schema.js';
 import { t } from './i18n.js';
 import { esc } from './sheet.js';
+import { richInnerHTML, serializeRich, setupRich } from './rich.js';
 
 const autoGrow = ta => { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; };
 
-function fieldHTML(f, note, lang, showLabel, sectionLabel) {
+function fieldHTML(f, note, lang, showLabel, sectionLabel, rich) {
   const L = k => esc(t(lang, k));
   const v = note.fields[f.id];
   const hasLabel = showLabel && f.labelKey;
-  const label = hasLabel ? `<label class="flabel" for="f-${f.id}">${L(f.labelKey)}</label>` : '';
+  const label = hasLabel ? `<label class="flabel" id="l-${f.id}" for="f-${f.id}">${L(f.labelKey)}</label>` : '';
   const aria = hasLabel ? '' : ` aria-label="${esc(sectionLabel)}"`; // 보이는 라벨이 없으면 섹션 이름을 읽어 준다
   let input = '';
   if (f.kind === 'line') {
@@ -25,6 +26,16 @@ function fieldHTML(f, note, lang, showLabel, sectionLabel) {
         <input type="text" name="${f.id}.${i}.text" value="${esc(it.text)}" placeholder="${item}" aria-label="${item}">
       </div>`;
     }).join('');
+  } else if (f.kind === 'rich') {
+    const lab = hasLabel ? ` aria-labelledby="l-${f.id}"` : aria;
+    input = `<div class="rich" id="f-${f.id}" contenteditable="true" role="textbox" aria-multiline="true" name="${f.id}" data-rich="${f.id}" data-testid="rich-body"${lab}>` +
+      `${richInnerHTML(v, rich.imageSrc, rich.labels)}</div>
+      <div class="rich-bar">
+        <button type="button" class="btn primary" data-rich-add>📷 ${L('btn.addPhoto')}</button>
+        <span class="page-btns"><button type="button" class="btn ghost small" data-testid="btn-add-page" data-page="add">${L('btn.addPage')}</button>
+        <button type="button" class="btn ghost small" data-testid="btn-remove-page" data-page="remove">${L('btn.removePage')}</button></span>
+      </div>
+      <p class="guide rich-hint">${L('photo.dropHint')}</p>`;
   } else if (f.kind === 'checks') {
     input = `<div class="chips">` + f.options.map(o => `<label class="chip">
         <input type="checkbox" name="${f.id}" value="${o.id}" ${v.includes(o.id) ? 'checked' : ''}><span>${L(o.labelKey)}</span></label>`).join('') + `</div>`;
@@ -33,7 +44,8 @@ function fieldHTML(f, note, lang, showLabel, sectionLabel) {
     <p class="over-msg" data-testid="overflow-${f.id}" hidden>⚠ ${L('warn.over')}</p></div>`;
 }
 
-export function renderForm(note, { lang, onChange }) {
+// rich: 자유 노트 '내용' 편집기 옵션 { imageSrc, addFiles, onDelete, confirm, labels }
+export function renderForm(note, { lang, onChange, rich }) {
   const schema = SCHEMAS[note.type];
   const form = document.createElement('form');
   form.className = 'note-form';
@@ -44,7 +56,7 @@ export function renderForm(note, { lang, onChange }) {
     return `<fieldset class="card" data-section="${sec.id}">
       <legend>${esc(t(lang, sec.labelKey))}</legend>
       ${sec.guideKey ? `<p class="guide">${esc(t(lang, sec.guideKey))}</p>` : ''}
-      ${sec.fields.map(f => fieldHTML(f, note, lang, showLabel, t(lang, sec.labelKey))).join('')}
+      ${sec.fields.map(f => fieldHTML(f, note, lang, showLabel, t(lang, sec.labelKey), rich)).join('')}
     </fieldset>`;
   }).join('');
   form.innerHTML = `<div class="card date-card"><label class="flabel" for="f-date">${esc(t(lang, 'field.date'))}</label>
@@ -52,6 +64,7 @@ export function renderForm(note, { lang, onChange }) {
 
   const current = JSON.parse(JSON.stringify(note));
   const apply = el => {
+    if (el.dataset?.rich) { current.fields[el.dataset.rich] = serializeRich(el); return; }
     const name = el.name;
     if (!name) return;
     if (name === 'date') current.date = el.value;
@@ -79,6 +92,8 @@ export function renderForm(note, { lang, onChange }) {
     }
   });
   requestAnimationFrame(() => form.querySelectorAll('textarea').forEach(autoGrow));
+  const richEl = form.querySelector('.rich');
+  if (richEl) form.richApi = setupRich(richEl, rich);
   return form;
 }
 

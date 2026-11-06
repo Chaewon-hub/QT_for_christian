@@ -57,7 +57,7 @@ test('schemas: three types, unique field ids, known kinds, translated labels', (
       assert.ok(DICT.ko[sec.labelKey], `label ${sec.labelKey}`);
       if (sec.guideKey) assert.ok(DICT.ko[sec.guideKey], `guide ${sec.guideKey}`);
       for (const f of sec.fields) {
-        assert.ok(['line', 'lines', 'checklist', 'checks'].includes(f.kind), `${f.id} kind`);
+        assert.ok(['line', 'lines', 'checklist', 'checks', 'rich'].includes(f.kind), `${f.id} kind`);
         if (f.labelKey) assert.ok(DICT.ko[f.labelKey], `field label ${f.labelKey}`);
         if (f.kind === 'lines') assert.ok(f.lines === 'auto' || f.lines > 0);
         if (f.kind === 'checklist') assert.ok(f.items > 0);

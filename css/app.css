@@ -81,34 +81,45 @@ body.pv-open { overflow: hidden; }
 .pv-page { position: relative; overflow: hidden; flex: none; box-shadow: 0 2px 10px rgba(0,0,0,.15); background: #fff; }
 .pv-page > .sheet { position: absolute; left: 0; top: 0; transform-origin: top left; }
 .pv-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.pv-actions { display: flex; gap: 6px; margin-left: auto; }
+.pv-tools + .pv-actions { margin-left: 12px; }
 .pv-hint { max-width: 860px; margin: -4px auto 10px; font-size: 14px; color: var(--muted); }
 @media (max-width: 700px) {
   .pv-head { flex-wrap: wrap; row-gap: 6px; }
   .pv-head > span:first-child { flex: 1; }
   .pv-tools { order: 3; width: 100%; margin-left: 0; }
   .pv-tools .btn { flex: 1; padding: 0 6px; font-size: 14px; }
+  .pv-actions, .pv-tools + .pv-actions { order: 4; width: 100%; margin-left: 0; }
+  .pv-actions .btn { flex: 1; font-size: 14px; }
 }
 
-/* 사진 배치 (미리보기 안에서만): 손잡이는 축소 비율(--inv)을 곱해 화면에서 일정한 크기로 보이게 */
-.pv-page { --inv: 1; }
-.pv-page .sheet .body { overflow: visible; }
-.pv-page .photo.editable { cursor: grab; touch-action: none; outline: calc(1.5px * var(--inv)) dashed rgba(47,128,237,.55); }
-.pv-page .photo.selected { outline: calc(3px * var(--inv)) solid #2F80ED; z-index: 3; }
-.pv-page .ph-resize { position: absolute; right: 0; bottom: 0; width: calc(30px * var(--inv)); height: calc(30px * var(--inv));
-  border-radius: 50%; background: #2F80ED; border: calc(3px * var(--inv)) solid #fff; box-shadow: 0 0 calc(4px * var(--inv)) rgba(0,0,0,.4);
-  cursor: nwse-resize; touch-action: none; transform: translate(35%, 35%); }
-.pv-page .ph-tools { position: absolute; left: calc(6px * var(--inv)); top: calc(6px * var(--inv)); display: flex; gap: calc(6px * var(--inv)); }
-.pv-page .ph-tools button { font: inherit; font-size: calc(14px * var(--inv)); font-weight: 700; height: calc(40px * var(--inv)); padding: 0 calc(10px * var(--inv));
-  border: none; border-radius: calc(10px * var(--inv)); background: #2F80ED; color: #fff; cursor: pointer; white-space: nowrap; }
-.pv-page .ph-tools [data-act=del] { background: #A33A2B; }
-
-/* 작성 폼의 사진 카드 */
-.photo-card h3 small { color: var(--muted); font-weight: 500; font-size: 14px; }
-.thumbs { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px; }
-.thumb { position: relative; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; background: var(--soft); border: 1.5px solid var(--line); }
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb-del { position: absolute; top: 4px; right: 4px; width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; cursor: pointer; }
-.photo-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 자유 노트 '내용' 편집기: 글과 사진을 한 칸에서 */
+.rich { min-height: 260px; font-size: 17px; line-height: 1.6; color: var(--ink); background: #FFFDF9; border: 1.5px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; cursor: text; }
+.rich:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.rich.dragover { border-style: dashed; border-color: #2F80ED; background: #F2F7FE; }
+.rich > div { min-height: 1.6em; }
+.rfig { position: relative; display: block; margin: 10px auto; max-width: 100%; border-radius: 6px; background: var(--soft);
+  cursor: grab; user-select: none; -webkit-user-select: none; outline: 1.5px dashed transparent; outline-offset: 2px; }
+.rfig:hover { outline-color: rgba(47,128,237,.55); }
+.rfig.sel { outline: 3px solid #2F80ED; }
+.rfig img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 6px; pointer-events: none; }
+.rf-tools { position: absolute; left: 6px; top: 6px; display: none; gap: 6px; flex-wrap: wrap; }
+.rf-tools button { font: inherit; font-size: 14px; font-weight: 700; height: 40px; min-width: 40px; padding: 0 10px; border: none; border-radius: 10px;
+  background: #2F80ED; color: #fff; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.rf-tools [data-rf=del] { background: #A33A2B; }
+.rf-resize { position: absolute; right: 0; bottom: 0; width: 30px; height: 30px; border-radius: 50%; background: #2F80ED; border: 3px solid #fff;
+  box-shadow: 0 0 4px rgba(0,0,0,.4); cursor: nwse-resize; touch-action: none; transform: translate(35%, 35%); display: none; }
+.rfig.sel .rf-tools { display: flex; }
+.rfig.sel .rf-resize { display: block; }
+.rich-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.page-btns { display: flex; gap: 6px; margin-left: auto; }
+.note-form .rich-hint { margin: 8px 0 0; }
+@media (max-width: 700px) {
+  .rich-bar > .btn.primary { flex: 1 1 100%; }
+  .page-btns { margin-left: 0; width: 100%; }
+  .page-btns .btn { flex: 1; }
+}
 
 .note-form { display: flex; flex-direction: column; }
 .note-form fieldset { border: 1.5px solid var(--line); }
