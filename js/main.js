@@ -312,7 +312,7 @@ function viewEditor(note, persisted) {
     lang: lang(),
     rich: note.type === 'free' ? {
       imageSrc: images.src,
-      labels: { up: t(lang(), 'photo.up'), down: t(lang(), 'photo.down'), del: t(lang(), 'btn.delete') },
+      labels: { up: t(lang(), 'photo.up'), down: t(lang(), 'photo.down'), left: t(lang(), 'photo.left'), right: t(lang(), 'photo.right'), del: t(lang(), 'btn.delete') },
       addFiles: addPhotoFiles,
       onDelete: id => images.remove([id]),
       confirm: () => confirmDialog(t(lang(), 'confirm.deletePhoto'), { okLabel: t(lang(), 'btn.delete'), danger: true }),

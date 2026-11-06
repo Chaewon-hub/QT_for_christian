@@ -134,10 +134,11 @@ function blocksFor(note, c, ink, imageSrc) {
     if (seg.type === 'text') return { type: 'single', min: 1, cls: 'margin', cols: [{ field: 'body', text: seg.text }] };
     let w = (BODY_W * seg.w) / 100, h = w * seg.ratio;
     if (h > MAX_H) { h = MAX_H; w = h / seg.ratio; }
+    const left = ((BODY_W - w) * seg.x) / 100; // 가로 위치: 남는 폭 안에서 왼쪽(0)~가운데(50)~오른쪽(100)
     const n = Math.ceil((h + 2) / LINE_MM);
     const src = imageSrc(seg.id);
     return { type: 'fixed', html: `<div class="lines margin pblk" style="height:${n * LINE_MM}mm">${'<div class="ln"></div>'.repeat(n)}` +
-      `<div class="photo" data-testid="photo" data-img="${esc(seg.id)}" style="width:${w.toFixed(2)}mm;height:${h.toFixed(2)}mm">` +
+      `<div class="photo" data-testid="photo" data-img="${esc(seg.id)}" style="left:${left.toFixed(2)}mm;width:${w.toFixed(2)}mm;height:${h.toFixed(2)}mm">` +
       (src ? `<img src="${esc(src)}" alt="" draggable="false">` : '<div class="ph-missing"></div>') + `</div></div>` };
   });
   return [

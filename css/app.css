@@ -94,22 +94,30 @@ body.pv-open { overflow: hidden; }
 }
 
 /* 자유 노트 '내용' 편집기: 글과 사진을 한 칸에서 */
-.rich { min-height: 260px; font-size: 17px; line-height: 1.6; color: var(--ink); background: #FFFDF9; border: 1.5px solid var(--line);
+.rich { position: relative; min-height: 260px; font-size: 17px; line-height: 1.6; color: var(--ink); background: #FFFDF9; border: 1.5px solid var(--line);
   border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; cursor: text; }
 .rich:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .rich.dragover { border-style: dashed; border-color: #2F80ED; background: #F2F7FE; }
 .rich > div { min-height: 1.6em; }
-.rfig { position: relative; display: block; margin: 10px auto; max-width: 100%; border-radius: 6px; background: var(--soft);
+.rfig { position: relative; display: block; margin: 10px 0; max-width: 100%; border-radius: 6px; background: var(--soft);
   cursor: grab; user-select: none; -webkit-user-select: none; outline: 1.5px dashed transparent; outline-offset: 2px; }
 .rfig:hover { outline-color: rgba(47,128,237,.55); }
-.rfig.sel { outline: 3px solid #2F80ED; }
+.rfig.sel { outline: 3px solid #2F80ED; touch-action: none; cursor: move; }
+.rfig.moving { z-index: 5; opacity: .9; box-shadow: 0 8px 24px rgba(0,0,0,.25); cursor: grabbing; transition: margin-left .08s ease; }
+.rf-drop { position: fixed; z-index: 50; height: 4px; border-radius: 2px; background: #2F80ED; pointer-events: none; box-shadow: 0 0 0 2px rgba(255,255,255,.8); }
 .rfig img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 6px; pointer-events: none; }
-.rf-tools { position: absolute; left: 6px; top: 6px; display: none; gap: 6px; flex-wrap: wrap; }
-.rf-tools button { font: inherit; font-size: 14px; font-weight: 700; height: 40px; min-width: 40px; padding: 0 10px; border: none; border-radius: 10px;
-  background: #2F80ED; color: #fff; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+/* 버튼 줄은 사진 바로 위에 띄운다 — 작은 사진도 사진 자체를 잡고 끌 수 있게 */
+.rf-tools { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6; display: none; gap: 6px; flex-wrap: nowrap;
+  padding: 4px; border-radius: 13px; background: rgba(255,255,255,.92); box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+.rfig[data-side=l] .rf-tools { left: auto; right: 0; } /* 오른쪽에 붙은 사진: 버튼 줄이 칸 밖으로 안 나가게 */
+.rfig.moving .rf-tools, .rich.dragover .rf-tools { display: none !important; }
+.rf-tools button { font: inherit; font-size: 19px; font-weight: 800; line-height: 1; height: 40px; width: 40px; padding: 0; border: none; border-radius: 10px;
+  background: #2F80ED; color: #fff; cursor: pointer; }
+.rf-tools button:disabled { background: #C9D8EE; cursor: default; }
 .rf-tools [data-rf=del] { background: #A33A2B; }
 .rf-resize { position: absolute; right: 0; bottom: 0; width: 30px; height: 30px; border-radius: 50%; background: #2F80ED; border: 3px solid #fff;
   box-shadow: 0 0 4px rgba(0,0,0,.4); cursor: nwse-resize; touch-action: none; transform: translate(35%, 35%); display: none; }
+.rfig[data-side=l] .rf-resize { right: auto; left: 0; transform: translate(-35%, 35%); cursor: nesw-resize; }
 .rfig.sel .rf-tools { display: flex; }
 .rfig.sel .rf-resize { display: block; }
 .rich-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }

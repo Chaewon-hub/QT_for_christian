@@ -216,7 +216,47 @@ test('free note photos go into the content box: button at the cursor, file drop 
   assert.ok(w1 < w0 - 80, `shrunk ${w0} -> ${w1}`);
   const sheetW = await page.getByTestId('preview').getByTestId('photo').evaluateAll(ps => ps.map(p => p.getBoundingClientRect().width));
   assert.ok(sheetW.length === 2 && sheetW[1] < sheetW[0] - 10, `sheet widths ${sheetW}`);
-  // 4) ↓ 버튼으로 첫 사진을 한 칸 아래로
+  // 3-2) 양옆: ← 버튼으로 왼쪽 끝 → 미리보기도 왼쪽에 붙는다
+  const pv = page.getByTestId('preview');
+  const gaps = () => pv.evaluate(p => {
+    const s = p.querySelector('.sheet .body').getBoundingClientRect();
+    return [...p.querySelectorAll('[data-testid=photo]')].map(ph => { const r = ph.getBoundingClientRect(); return [Math.round(r.left - s.left), Math.round(s.right - r.right)]; });
+  });
+  await fig2.getByTestId('rich-photo-left').click();
+  await settle(page);
+  assert.equal(await fig2.getAttribute('data-x'), '0');
+  assert.ok(await fig2.getByTestId('rich-photo-left').isDisabled(), 'already at the left edge');
+  assert.ok(await figs.nth(0).getByTestId('rich-photo-left').isDisabled(), 'a full-width photo cannot move sideways');
+  let g2 = (await gaps())[1];
+  assert.ok(g2[0] <= 2 && g2[1] > 30, `sheet: photo on the left ${g2}`);
+  // 3-3) 마우스로 오른쪽 끝까지 끌기 (순서는 그대로, 끝에 자석처럼 붙음)
+  await fig2.scrollIntoViewIfNeeded();
+  let b2 = await fig2.boundingBox();
+  await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(1180, b2.y + b2.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await settle(page);
+  assert.equal(await fig2.getAttribute('data-x'), '100');
+  assert.equal(await layout(), 'P|BEFORELINE|P|AFTERLINE', 'a sideways drag keeps the order');
+  g2 = (await gaps())[1];
+  assert.ok(g2[1] <= 2 && g2[0] > 30, `sheet: photo on the right ${g2}`);
+  // 3-4) 위로 끌어 BEFORELINE 위(줄 사이)에 놓기
+  b2 = await fig2.boundingBox();
+  const bl = await rich.locator('div', { hasText: 'BEFORELINE' }).first().boundingBox();
+  await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b2.x + b2.width / 2, bl.y - 2, { steps: 10 });
+  assert.ok(await page.locator('.rf-drop').isVisible(), 'a blue line shows where it will land');
+  await page.mouse.up();
+  await settle(page);
+  assert.equal(await layout(), 'P|P|BEFORELINE|AFTERLINE');
+  assert.equal(await fig2.getAttribute('data-x'), '100', 'keeps its side');
+  assert.equal(await page.locator('.rf-drop').count(), 0);
+  // 4) ↓ 버튼으로 한 칸씩 아래로
+  await figs.nth(1).getByTestId('rich-photo-down').click();
+  await settle(page);
+  assert.equal(await layout(), 'P|BEFORELINE|P|AFTERLINE');
   await figs.nth(0).click();
   await figs.nth(0).getByTestId('rich-photo-down').click();
   await settle(page);
@@ -227,7 +267,8 @@ test('free note photos go into the content box: button at the cursor, file drop 
   await figs.first().waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('[data-testid=rich-body] [data-testid=rich-photo] img')].every(i => i.complete && i.naturalWidth > 0));
   assert.equal(await layout(), 'BEFORELINE|P|P|AFTERLINE');
-  // 6) 쪽 추가
+  assert.deepEqual(await figs.evaluateAll(fs => fs.map(f => f.dataset.x)), ['50', '100'], 'side positions are kept after reload');
+  // 6) 페이지 추가
   await settle(page);
   const before = await sheets(page).count();
   await page.getByTestId('btn-add-page').click();
@@ -253,7 +294,7 @@ test('free note photos go into the content box: button at the cursor, file drop 
   assert.equal(await page.getByTestId('preview').locator('[data-testid^="rich-photo"], [data-testid="photo-resize"]').count(), 0);
   await page.getByTestId('btn-preview-close').click();
   await page.getByTestId('preview').waitFor({ state: 'hidden' });
-  // 9) ✕로 사진 빼기, 빈 쪽 빼기
+  // 9) ✕로 사진 빼기, 빈 페이지 빼기
   await figs.nth(0).click();
   await figs.nth(0).getByTestId('rich-photo-delete').click();
   await page.getByTestId('confirm-ok').click();
