@@ -170,6 +170,85 @@ test('PC: the preview appears only after pressing the button', T, async () => {
   await ctx.close();
 });
 
+test('free note photos: add, drag, resize, move to another page, keep after reload, print and PDF, delete', T, async () => {
+  const { ctx, page, errors } = await open();
+  await page.getByTestId('new-free').click();
+  await page.locator('[name="title"]').fill('사진 노트');
+  await page.getByTestId('photo-input').setInputFiles(path.join(ROOT, 'assets/icons/icon-512.png'));
+  await page.getByTestId('preview').waitFor({ state: 'visible' }); // 사진을 넣으면 배치할 수 있게 미리보기가 열린다
+  const photo = page.getByTestId('preview').getByTestId('photo');
+  await photo.waitFor();
+  await settle(page); // 미리보기가 옆에서 밀려 들어오는 동안(0.2초)은 위치가 움직이므로 기다린다
+  assert.equal(await photo.count(), 1);
+  assert.equal(await page.getByTestId('photo-thumb').count(), 1, 'thumbnail in the form');
+  // 끌어서 옮기기
+  const b0 = await photo.boundingBox();
+  await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b0.x + b0.width / 2 + 80, b0.y + b0.height / 2 + 120, { steps: 8 });
+  await page.mouse.up();
+  await settle(page);
+  const b1 = await photo.boundingBox();
+  assert.ok(b1.x > b0.x + 40 && b1.y > b0.y + 60, `moved (${b0.x},${b0.y}) -> (${b1.x},${b1.y})`);
+  // 모서리를 끌어 크기 바꾸기 (비율 유지)
+  const hb = await page.getByTestId('photo-resize').boundingBox();
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + hb.width / 2 + 60, hb.y + hb.height / 2 + 60, { steps: 6 });
+  await page.mouse.up();
+  await settle(page);
+  const b2 = await photo.boundingBox();
+  assert.ok(b2.width > b1.width + 20, `resized ${b1.width} -> ${b2.width}`);
+  assert.ok(Math.abs(b2.width / b2.height - b1.width / b1.height) < 0.05, 'aspect ratio kept');
+  // 쪽 추가 → 다음 쪽으로 옮기기
+  await page.getByTestId('btn-add-page').click();
+  await settle(page);
+  assert.equal(await sheets(page).count(), 2);
+  await photo.click();
+  await page.getByTestId('photo-next-page').click();
+  await settle(page);
+  assert.equal(await sheets(page).nth(1).getByTestId('photo').count(), 1, 'photo is on page 2');
+  // 새로고침 후에도 그대로
+  await page.getByTestId('save-status').filter({ hasText: /저장됨/ }).waitFor();
+  await page.reload();
+  await page.getByTestId('btn-preview').click();
+  await page.getByTestId('preview').waitFor({ state: 'visible' });
+  await settle(page);
+  assert.equal(await sheets(page).count(), 2);
+  assert.equal(await sheets(page).nth(1).getByTestId('photo').count(), 1, 'kept after reload');
+  assert.ok(await sheets(page).nth(1).locator('[data-testid="photo"] img').evaluate(i => i.complete && i.naturalWidth > 0), 'image data restored');
+  await page.getByTestId('btn-preview-close').click();
+  // 인쇄: 2쪽, 사진이 실제 이미지로 들어감
+  await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
+  await page.getByTestId('btn-print').click();
+  await page.waitForFunction(() => window.__printed === true, null, { timeout: 10_000 });
+  const pfile = path.join(TMP, 'photo-print.pdf');
+  await page.pdf({ path: pfile, preferCSSPageSize: true, printBackground: true });
+  assert.equal(pdfPages(pfile), 2);
+  const imgs = execFileSync('pdfimages', ['-list', pfile]).toString().trim().split('\n').slice(2);
+  assert.ok(imgs.some(l => /^\s*2\s/.test(l)), 'an image is placed on page 2 of the print');
+  // PDF 다운로드도 2쪽
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 90_000 }), page.getByTestId('btn-pdf').click()]);
+  const dfile = path.join(TMP, 'photo-dl.pdf');
+  await dl.saveAs(dfile);
+  assert.equal(pdfPages(dfile), 2);
+  // 사진 빼기 → 빈 쪽 빼기
+  await page.getByTestId('btn-preview').click();
+  await page.getByTestId('preview').waitFor({ state: 'visible' });
+  await settle(page);
+  await photo.click();
+  await page.getByTestId('photo-delete').click();
+  await page.getByTestId('confirm-ok').click();
+  await settle(page);
+  assert.equal(await photo.count(), 0);
+  assert.equal(await page.getByTestId('photo-thumb').count(), 0);
+  await page.getByTestId('btn-remove-page').click();
+  await settle(page);
+  assert.equal(await sheets(page).count(), 1);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 test('PDF download produces a one-page A4 PDF under 3 MB for a short note', T, async () => {
   const { ctx, page, errors } = await open();
   await page.getByTestId('new-devotion').click();

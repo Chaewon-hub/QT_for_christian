@@ -242,7 +242,8 @@ function splitBlock(b, k, body) {
 
 // note → { pages: [.sheet …], overflows: [한 줄 칸 id …], dispose() }
 // 측정을 위해 화면 밖 상자에 그린다. 호출한 쪽에서 pages를 원하는 곳으로 옮긴 뒤 dispose()를 부른다.
-export function buildPages(note, { theme = 'a', lang = 'ko', print = false } = {}) {
+// imageSrc(id): 자유 노트 사진의 data URL을 돌려주는 함수
+export function buildPages(note, { theme = 'a', lang = 'ko', print = false, imageSrc = () => null } = {}) {
   const c = { lang, L: k => esc(t(lang, k)) };
   const ink = palette(theme, print).ink;
   const host = document.createElement('div');
@@ -302,10 +303,44 @@ export function buildPages(note, { theme = 'a', lang = 'ko', print = false } = {
   }
   finishPage();
 
+  if (note.type === 'free') {
+    // '+ 쪽 추가'로 늘린 빈 장 (줄만 있는 장)
+    for (let i = 0; i < (note.extraPages || 0); i++) {
+      newPage();
+      const b = { type: 'single', auto: true, min: 1, cls: 'margin', cols: [{ field: 'body', text: '' }] };
+      const el = toEl(blockHTML(b, 1));
+      body.appendChild(el);
+      placed.push({ b, n: 1, el });
+    }
+    finishPage();
+    placePhotos(pages, note.images || [], imageSrc);
+  }
+
   if (pages.length > 1) pages.forEach((p, i) => { p.querySelector('footer .pg').textContent = `${i + 1} / ${pages.length}`; });
   const overflows = new Set();
   for (const p of pages) for (const id of collectOneLineOverflows(p)) overflows.add(id);
   return { pages, overflows: [...overflows], dispose: () => host.remove() };
+}
+
+// 사진을 본문 영역 기준 mm 좌표로 붙인다. 장 밖으로 나가지 않게 위치·크기를 맞춘다.
+export const PX_PER_MM = 96 / 25.4;
+function placePhotos(pages, photos, imageSrc) {
+  for (const ph of photos) {
+    const body = pages[Math.min(ph.page, pages.length - 1)].querySelector('.body');
+    const bw = body.clientWidth / PX_PER_MM, bh = body.clientHeight / PX_PER_MM;
+    let w = Math.min(ph.w, bw);
+    if (w * ph.ratio > bh) w = bh / ph.ratio;
+    const h = w * ph.ratio;
+    const x = Math.min(ph.x, Math.max(0, bw - w)), y = Math.min(ph.y, Math.max(0, bh - h));
+    const el = document.createElement('div');
+    el.className = 'photo';
+    el.dataset.img = ph.id;
+    el.setAttribute('data-testid', 'photo');
+    el.style.cssText = `left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;width:${w.toFixed(2)}mm;height:${h.toFixed(2)}mm`;
+    const src = imageSrc(ph.id);
+    el.innerHTML = src ? `<img src="${esc(src)}" alt="" draggable="false">` : '<div class="ph-missing"></div>';
+    body.appendChild(el);
+  }
 }
 
 // 한 줄 칸(.one)이 넘쳤는지: 여러 줄 칸은 늘어나므로 넘치지 않는다.

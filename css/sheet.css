@@ -60,6 +60,11 @@
 /* 본문: 블록을 위에서부터 쌓는다 (넘치면 sheet.js가 다음 장으로 넘긴다) */
 .sheet .body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4.2mm; overflow: hidden; }
 .sheet .body > * { flex: none; }
+.sheet .body { position: relative; }
+/* 자유 노트 사진 (본문 위에 붙임) */
+.sheet .body > .photo { position: absolute; z-index: 2; }
+.sheet .photo img { display: block; width: 100%; height: 100%; border-radius: 1.2mm; user-select: none; -webkit-user-drag: none; }
+.sheet .photo .ph-missing { width: 100%; height: 100%; border-radius: 1.2mm; background: var(--soft); }
 .sheet section { display: flex; flex-direction: column; min-width: 0; }
 .sheet .sh .cont { font-size: 8.6pt; color: var(--muted); }
 

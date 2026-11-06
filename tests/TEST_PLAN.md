@@ -18,6 +18,7 @@
 | 넘치면 다음 장으로 (인쇄·PDF 쪽수 = 미리보기 쪽수, 글자 누락 없음) | e2e `very long devotion continues…` |
 | 자유 노트 자동 페이지 추가·쪽 번호 | e2e `free note adds pages…` |
 | 미리보기는 버튼을 눌렀을 때만 | e2e `PC: the preview appears only…` |
+| 자유 노트 사진: 넣기·끌어 옮기기·크기 조절(비율 유지)·장 이동·새로고침 후 유지·인쇄/PDF 포함·빼기 | unit `images`, `normalizeNote` / e2e `free note photos…` |
 | 하단 저작권 문구 | e2e `devotion…` (문구 확인) |
 | 4개 언어 화면 | unit `i18n` (모든 언어 키 일치) / e2e `language switch…` |
 | 벚꽃 양 그림 (PDF에서도 색 유지) | unit `sheep` (var() 미사용, 테마별 색) |

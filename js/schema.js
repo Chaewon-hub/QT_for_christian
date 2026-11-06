@@ -96,7 +96,22 @@ export function normalizeNote(note) {
       fields[f.id] = Array.isArray(fields[f.id]) ? fields[f.id].filter(v => f.options.some(o => o.id === v)) : [];
     } else fields[f.id] = String(fields[f.id] ?? '');
   }
-  return { ...note, fields };
+  return { ...note, fields, images: normalizeImages(note.images), extraPages: Math.max(0, Math.floor(+note.extraPages || 0)) };
+}
+
+// 자유 노트의 사진 배치: { id, page(0부터), x·y·w(mm, 본문 영역 기준), ratio(높이/너비) }
+export const PHOTO_MIN_W = 20, PHOTO_MAX_W = 182;
+const num = (v, d = 0) => (Number.isFinite(+v) && v !== null && v !== '' ? +v : d);
+export function normalizeImages(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(p => p && typeof p.id === 'string' && p.id).map(p => ({
+    id: p.id,
+    page: Math.max(0, Math.floor(num(p.page))),
+    x: Math.max(0, num(p.x)),
+    y: Math.max(0, num(p.y)),
+    w: Math.min(PHOTO_MAX_W, Math.max(PHOTO_MIN_W, num(p.w, 100))),
+    ratio: num(p.ratio, 0.75) > 0 ? num(p.ratio, 0.75) : 0.75,
+  }));
 }
 
 export function summarize(note, max = 40) {

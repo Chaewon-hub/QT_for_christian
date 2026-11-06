@@ -21,10 +21,11 @@ function loadScript(src) {
 
 const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-export async function makePdfBlob(note, { theme = 'a', lang = 'ko' } = {}) {
+export async function makePdfBlob(note, { theme = 'a', lang = 'ko', imageSrc } = {}) {
   await Promise.all([loadScript('assets/vendor/html2canvas.min.js'), loadScript('assets/vendor/jspdf.umd.min.js')]);
   await document.fonts.ready;
-  const built = buildPages(note, { theme, lang });
+  const built = buildPages(note, { theme, lang, imageSrc });
+  await Promise.all([...built.pages.flatMap(p => [...p.querySelectorAll('img')])].map(img => img.decode?.().catch(() => {})));
   try {
     await frames();
     const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
