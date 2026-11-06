@@ -3,8 +3,7 @@ import { SCHEMAS, NOTE_TYPES, newNote, normalizeNote, summarize, weekdayIndex } 
 import { t, detectLang, LANGS, HTML_LANG } from './i18n.js';
 import { createStore } from './store.js';
 import { renderForm, markOverflows } from './form.js';
-import { renderSheet, layoutSheet, esc } from './sheet.js';
-import { collectOverflows } from './overflow.js';
+import { buildPages, esc } from './sheet.js';
 import { sheepSVG } from './sheep.js';
 import { savePdf } from './pdf.js';
 
@@ -182,32 +181,34 @@ function setStatus() {
   el.classList.toggle('err', !!store.lastError && store.effectiveMode() === 'local');
 }
 
+// 노트를 A4 페이지들로 나눠 미리보기(닫혀 있어도 계산은 한다)에 넣고, 쪽수·한 줄 칸 경고를 갱신한다.
 function renderPreview() {
   if (!editor) return;
-  const host = $('.pv-inner', app);
-  const el = renderSheet(editor.note, { theme: theme(), lang: lang() });
-  host.replaceChildren(el);
-  layoutSheet(el);
-  editor.sheetEl = el;
-  editor.overflows = collectOverflows(el);
+  const built = buildPages(editor.note, { theme: theme(), lang: lang() });
+  const list = $('.pv-pages', app);
+  list.replaceChildren(...built.pages.map(p => { const w = document.createElement('div'); w.className = 'pv-page'; w.appendChild(p); return w; }));
+  built.dispose();
+  editor.pageCount = built.pages.length;
+  editor.overflows = built.overflows;
   markOverflows($('.note-form', app), editor.overflows);
+  const badge = $('[data-testid=page-count]', app);
+  badge.textContent = t(lang(), 'status.pages', { n: editor.pageCount });
+  badge.classList.toggle('multi', editor.pageCount > 1);
   fitPreview();
 }
 
 function fitPreview() {
-  const scaleBox = $('.pv-scale', app), inner = $('.pv-inner', app);
-  if (!scaleBox || !inner?.firstChild) return;
-  const natural = inner.firstChild.offsetWidth || 794, naturalH = inner.firstChild.offsetHeight || 1123;
-  let s = Math.min(1.25, scaleBox.clientWidth / natural);
-  const top = $('.ed-top', app)?.offsetHeight || 0;
-  document.documentElement.style.setProperty('--edtop', `${top}px`);
-  if (window.matchMedia('(min-width: 1024px)').matches) {
-    // PC에서는 A4 한 장이 화면 높이 안에 다 보이도록 맞춘다.
-    s = Math.min(s, Math.max(0.3, (window.innerHeight - top - 64) / naturalH));
+  const list = $('.pv-pages', app);
+  if (!list) return;
+  const avail = list.clientWidth;
+  for (const w of list.children) {
+    const sheet = w.firstElementChild;
+    const natural = sheet.offsetWidth || 794, naturalH = sheet.offsetHeight || 1123;
+    const s = Math.min(1, avail / natural);
+    sheet.style.transform = `scale(${s})`;
+    w.style.width = `${natural * s}px`;
+    w.style.height = `${naturalH * s}px`;
   }
-  inner.style.transform = `scale(${s})`;
-  inner.style.marginLeft = `${Math.max(0, (scaleBox.clientWidth - natural * s) / 2)}px`;
-  scaleBox.style.height = `${naturalH * s}px`;
 }
 
 // 입력 직후 미리보기·인쇄·PDF를 눌러도 최신 내용으로 판단하도록, 대기 중인 미리보기 갱신을 바로 실행한다.
@@ -233,9 +234,9 @@ async function doPrint() {
 
 function preparePrint() {
   if (!editor) return;
-  const el = renderSheet(editor.note, { theme: theme(), lang: lang(), print: true });
-  printRoot.replaceChildren(el);
-  layoutSheet(el);
+  const built = buildPages(editor.note, { theme: theme(), lang: lang(), print: true });
+  printRoot.replaceChildren(...built.pages);
+  built.dispose();
   document.body.classList.add('has-print');
 }
 window.addEventListener('beforeprint', () => { if (editor) preparePrint(); });
@@ -265,11 +266,12 @@ function viewEditor(note, persisted) {
       <header class="topbar ed">
         <a class="btn ghost" href="#/" data-testid="btn-back">← ${L('btn.back')}</a>
         <h1 class="title">${L('type.' + note.type)}</h1>
+        <span class="page-count" data-testid="page-count"></span>
         <span class="save-status" data-testid="save-status" aria-live="polite"></span>
         <button type="button" class="btn ghost danger-text small" data-testid="btn-delete" ${persisted ? '' : 'hidden'}>${L('btn.delete')}</button>
       </header>
       <div class="actions" role="toolbar">
-        <button type="button" class="btn ghost only-mobile" data-testid="btn-preview"><span class="ico">👁</span> ${L('btn.preview')}</button>
+        <button type="button" class="btn ghost" data-testid="btn-preview"><span class="ico">👁</span> ${L('btn.preview')}</button>
         <button type="button" class="btn ghost" data-testid="btn-print"><span class="ico">🖨</span> ${L('btn.print')}</button>
         <button type="button" class="btn primary" data-testid="btn-pdf"><span class="ico">⬇</span> ${L('btn.pdf')}</button>
       </div>
@@ -277,8 +279,8 @@ function viewEditor(note, persisted) {
     <div class="ed-body">
       <div class="form-col"></div>
       <aside class="preview-col" data-testid="preview" aria-label="${L('preview.title')}">
-        <div class="pv-head"><span>${L('preview.title')}</span><button type="button" class="btn ghost only-mobile" data-testid="btn-preview-close">✕ ${L('btn.close')}</button></div>
-        <div class="pv-scale"><div class="pv-inner"></div></div>
+        <div class="pv-head"><span>${L('preview.title')}</span><button type="button" class="btn ghost" data-testid="btn-preview-close">✕ ${L('btn.close')}</button></div>
+        <div class="pv-pages"></div>
       </aside>
     </div>
   </div>`;
@@ -305,7 +307,7 @@ function viewEditor(note, persisted) {
     }
   };
   editor.ro = new ResizeObserver(fitPreview);
-  editor.ro.observe($('.pv-scale', app));
+  editor.ro.observe($('.pv-pages', app));
   setStatus();
   renderPreview();
   document.fonts.ready.then(() => { if (editor) renderPreview(); });

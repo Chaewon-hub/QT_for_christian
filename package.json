@@ -1,6 +1,6 @@
 {
   "name": "qt-note",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "교인용 묵상·예배 노트 웹앱 (입력 → 인쇄 / PDF 저장). 정적 파일만으로 동작하며 GitHub Pages에 그대로 배포합니다.",
   "type": "module",

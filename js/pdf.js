@@ -1,6 +1,6 @@
-// PDF 바로 다운로드: 시트를 화면 밖에 그려 이미지로 캡처(html2canvas) → A4 PDF(jsPDF).
+// PDF 바로 다운로드: A4 페이지들을 화면 밖에 그려 한 장씩 이미지로 캡처(html2canvas) → 여러 쪽 PDF(jsPDF).
 // 이 파일은 불러올 때 DOM을 건드리지 않는다 (pdfFileName은 Node 테스트에서도 쓰임).
-import { renderSheet, layoutSheet } from './sheet.js';
+import { buildPages } from './sheet.js';
 import { palette } from './sheep.js';
 
 export function pdfFileName(note) {
@@ -23,26 +23,26 @@ const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimati
 
 export async function makePdfBlob(note, { theme = 'a', lang = 'ko' } = {}) {
   await Promise.all([loadScript('assets/vendor/html2canvas.min.js'), loadScript('assets/vendor/jspdf.umd.min.js')]);
-  const host = document.createElement('div');
-  host.className = 'pdf-host';
-  const el = renderSheet(note, { theme, lang });
-  host.appendChild(el);
-  document.body.appendChild(host);
+  await document.fonts.ready;
+  const built = buildPages(note, { theme, lang });
   try {
-    layoutSheet(el);
-    await document.fonts.ready;
-    layoutSheet(el);
     await frames();
-    const canvas = await window.html2canvas(el, {
-      scale: 2.5, backgroundColor: palette(theme).bg, logging: false, useCORS: false,
-      windowWidth: el.scrollWidth, windowHeight: el.scrollHeight,
-    });
     const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-    doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+    for (let i = 0; i < built.pages.length; i++) {
+      // 캡처할 장만 맨 위에 보이게 한다 (화면 밖 위치에서도 잘리지 않도록)
+      built.pages.forEach((p, j) => { p.style.display = j === i ? '' : 'none'; });
+      const el = built.pages[i];
+      const canvas = await window.html2canvas(el, {
+        scale: 2.5, backgroundColor: palette(theme).bg, logging: false, useCORS: false,
+        windowWidth: el.scrollWidth, windowHeight: el.scrollHeight,
+      });
+      if (i > 0) doc.addPage('a4', 'portrait');
+      doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+    }
     doc.setProperties({ title: pdfFileName(note).replace(/\.pdf$/, ''), creator: 'QT Note' });
     return doc.output('blob');
   } finally {
-    host.remove();
+    built.dispose();
   }
 }
 

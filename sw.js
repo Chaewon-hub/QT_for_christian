@@ -1,6 +1,6 @@
 // Service worker: 오프라인에서도 앱이 열리도록 파일을 기기에 보관한다.
-// 새 버전을 올릴 때는 CACHE 이름의 숫자를 올린다 (예: qtnote-v1.0.1).
-const CACHE = 'qtnote-v1.0.0';
+// 새 버전을 올릴 때는 CACHE 이름의 숫자를 올린다 (예: qtnote-v1.1.1).
+const CACHE = 'qtnote-v1.1.0';
 const PRECACHE = [
   './',
   'index.html',
@@ -15,7 +15,7 @@ const PRECACHE = [
   'js/form.js',
   'js/sheet.js',
   'js/sheep.js',
-  'js/overflow.js',
+  
   'js/pdf.js',
   'assets/vendor/html2canvas.min.js',
   'assets/vendor/jspdf.umd.min.js',

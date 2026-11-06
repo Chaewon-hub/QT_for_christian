@@ -14,7 +14,10 @@
 | 인쇄 (A4 1쪽, 앱 UI 숨김) | e2e `print layout…` |
 | PDF 바로 다운로드 | unit `pdfFileName` / e2e `PDF download…` (A4 1쪽, 3MB 미만) |
 | 저장 방식 선택 (기기 보관 / 저장 안 함) | unit `store` 전체 / e2e `first run…`, `none mode…` |
-| 칸 넘침 경고 | e2e `overflow warning…` |
+| 여러 줄 칸은 늘어나고 잘리지 않음, 한 줄 칸은 경고 | unit `snapCut` / e2e `long multi-line text grows…` |
+| 넘치면 다음 장으로 (인쇄·PDF 쪽수 = 미리보기 쪽수, 글자 누락 없음) | e2e `very long devotion continues…` |
+| 자유 노트 자동 페이지 추가·쪽 번호 | e2e `free note adds pages…` |
+| 미리보기는 버튼을 눌렀을 때만 | e2e `PC: the preview appears only…` |
 | 하단 저작권 문구 | e2e `devotion…` (문구 확인) |
 | 4개 언어 화면 | unit `i18n` (모든 언어 키 일치) / e2e `language switch…` |
 | 벚꽃 양 그림 (PDF에서도 색 유지) | unit `sheep` (var() 미사용, 테마별 색) |

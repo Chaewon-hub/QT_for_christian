@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import { DICT, LANGS, t, detectLang } from '../../js/i18n.js';
 import { NOTE_TYPES, SCHEMAS, newNote, emptyFields, fieldList, summarize } from '../../js/schema.js';
 import { pdfFileName } from '../../js/pdf.js';
+import { snapCut } from '../../js/sheet.js';
+
+test('snapCut splits long text at a natural boundary for the next page', () => {
+  assert.deepEqual(snapCut('hello world foo', 13), ['hello world', 'foo']);
+  assert.deepEqual(snapCut('a\nb', 2), ['a', 'b']);
+  assert.deepEqual(snapCut('가나다라마바사', 3), ['가나다', '라마바사'], 'no spaces (CJK): cut by character');
+  assert.deepEqual(snapCut('abc', 5), ['abc', '']);
+  const [h, t] = snapCut('주님께서 오늘도 함께하심을 감사드립니다', 12); // 12글자째는 '함께하' 중간 → 단어 앞에서 자른다
+  assert.equal(h, '주님께서 오늘도');
+  assert.equal(t, '함께하심을 감사드립니다');
+});
+
+test('lines fields declare a minimum number of lines', () => {
+  for (const type of NOTE_TYPES) for (const f of fieldList(type))
+    if (f.kind === 'lines') assert.ok((f.lines === 'auto' ? f.min : f.lines) >= 1, `${type}.${f.id}`);
+});
 
 test('all four languages have exactly the same keys', () => {
   assert.deepEqual(LANGS, ['ko', 'ja', 'en', 'zh']);

@@ -1,5 +1,6 @@
 // 노트 3종의 칸 정의. 폼(form.js)과 A4 시트(sheet.js)가 모두 이 정의를 따른다.
-// kind: line(한 줄) | lines(여러 줄, lines=숫자 또는 'auto') | checklist(체크+한 줄 × items) | checks(복수 선택)
+// kind: line(한 줄, 넘치면 경고) | lines(여러 줄: lines=최소 줄 수, 'auto'면 남는 공간을 채움(min=최소). 넘치면 칸이 늘어나고 다음 장으로 이어짐)
+//       | checklist(체크+한 줄 × items) | checks(복수 선택)
 
 export const NOTE_TYPES = ['devotion', 'worship', 'free'];
 
@@ -9,7 +10,7 @@ export const SCHEMAS = {
     sections: [
       { id: 'scripture', labelKey: 'sec.scripture', guideKey: 'guide.copy', fields: [
         { id: 'scripture_ref', kind: 'line', labelKey: 'field.passage' },
-        { id: 'scripture', kind: 'lines', lines: 'auto', rows: 6 },
+        { id: 'scripture', kind: 'lines', lines: 'auto', min: 6, rows: 6 },
       ] },
       { id: 'hymn', labelKey: 'sec.hymn', fields: [{ id: 'hymn', kind: 'line' }] },
       { id: 'reflect', labelKey: 'sec.reflect', guideKey: 'guide.reflect', fields: [{ id: 'reflect', kind: 'lines', lines: 3 }] },
@@ -33,8 +34,8 @@ export const SCHEMAS = {
         { id: 'sermon_title', kind: 'line', labelKey: 'field.sermonTitle' },
       ] },
       { id: 'sermon', labelKey: 'sec.sermon', guideKey: 'guide.sermon', fields: [
-        { id: 'sermon_keywords', kind: 'lines', lines: 'auto', rows: 3, labelKey: 'form.keywords' },
-        { id: 'sermon', kind: 'lines', lines: 'auto', rows: 8, labelKey: 'form.body' },
+        { id: 'sermon_keywords', kind: 'lines', lines: 'auto', min: 6, rows: 3, labelKey: 'form.keywords' },
+        { id: 'sermon', kind: 'lines', lines: 'auto', min: 6, rows: 8, labelKey: 'form.body' },
       ] },
       { id: 'summary', labelKey: 'sec.summary', fields: [{ id: 'summary', kind: 'line' }] },
       { id: 'insight', labelKey: 'sec.insight', fields: [{ id: 'insight', kind: 'lines', lines: 3 }] },
@@ -51,7 +52,7 @@ export const SCHEMAS = {
     sections: [
       { id: 'main', labelKey: 'sec.freeMain', fields: [
         { id: 'title', kind: 'line', labelKey: 'field.title' },
-        { id: 'body', kind: 'lines', lines: 'auto', rows: 12, labelKey: 'form.body' },
+        { id: 'body', kind: 'lines', lines: 'auto', min: 1, rows: 12, labelKey: 'form.body' },
       ] },
     ],
   },

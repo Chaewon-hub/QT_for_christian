@@ -12,13 +12,14 @@ const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TMP = mkdtempSync(path.join(os.tmpdir(), 'qtnote-e2e-'));
-const T = { timeout: 90_000 };
+const T = { timeout: 120_000 };
+const DESKTOP = { viewport: { width: 1440, height: 1000 } };
 
 let server, browser;
 before(async () => { server = await startServer(ROOT); browser = await chromium.launch(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
-async function open({ mode = 'local', lang = 'ko', ctxOpts = {} } = {}) {
+async function open({ mode = 'local', lang = 'ko', ctxOpts = DESKTOP } = {}) {
   const ctx = await browser.newContext({ locale: 'ko-KR', ...ctxOpts });
   const page = await ctx.newPage();
   const errors = [];
@@ -29,8 +30,14 @@ async function open({ mode = 'local', lang = 'ko', ctxOpts = {} } = {}) {
   if (mode) await page.getByTestId(`setup-${mode}`).click();
   return { ctx, page, errors };
 }
-const sheet = page => page.getByTestId('preview').locator('.sheet');
-const field = (page, id) => sheet(page).locator(`[data-field="${id}"]`);
+// 미리보기는 여러 장일 수 있고 닫혀 있을 수도 있으므로 textContent로 모든 장의 글을 모은다.
+const sheets = page => page.getByTestId('preview').locator('.sheet');
+const firstSheet = page => sheets(page).first();
+const fieldText = async (page, id) =>
+  (await page.getByTestId('preview').locator(`[data-field="${id}"]`).allTextContents()).join('\n');
+const settle = page => page.waitForTimeout(450);
+const squash = s => s.replace(/\s+/g, '');
+const pdfPages = file => +execFileSync('pdfinfo', [file]).toString().match(/Pages:\s+(\d+)/)[1];
 
 test('first run shows the storage choice; local mode keeps notes after reload', T, async () => {
   const { ctx, page, errors } = await open({ mode: 'local' });
@@ -55,39 +62,115 @@ test('devotion note: typed text appears on the A4 sheet and the weekday is marke
   await page.locator('[name="scripture"]').fill('나는 참포도나무요 내 아버지는 농부라');
   await page.locator('[name="action.0.text"]').fill('가족에게 먼저 인사하기');
   await page.locator('[name="action.0.done"]').check();
-  await page.waitForTimeout(400);
-  assert.match(await field(page, 'scripture_ref').innerText(), /요한복음 15:1-8/);
-  assert.match(await field(page, 'scripture').innerText(), /참포도나무/);
-  assert.match(await field(page, 'action').innerText(), /가족에게/);
-  assert.equal(await sheet(page).locator('[data-field="action"] .done').count(), 1);
-  assert.equal(await sheet(page).locator('.days [data-day="6"].on').count(), 1, 'Sunday circled');
-  assert.equal(await sheet(page).locator('.days .on').count(), 1);
-  assert.match(await sheet(page).locator('.ymd').innerText(), /2026[\s\S]*11[\s\S]*8/);
-  assert.match(await sheet(page).locator('footer').innerText(), /본 양식의 무단 복제 및 사용을 금합니다/);
-  assert.equal(await sheet(page).locator('h1').innerText(), '데일리 묵상 노트');
-  assert.equal(await sheet(page).locator('.sheep svg').count(), 1, 'sheep drawn');
+  await settle(page);
+  assert.match(await fieldText(page, 'scripture_ref'), /요한복음 15:1-8/);
+  assert.match(await fieldText(page, 'scripture'), /참포도나무/);
+  assert.match(await fieldText(page, 'action'), /가족에게/);
+  assert.equal(await firstSheet(page).locator('[data-field="action"] .done').count(), 1);
+  assert.equal(await firstSheet(page).locator('.days [data-day="6"].on').count(), 1, 'Sunday circled');
+  assert.equal(await firstSheet(page).locator('.days .on').count(), 1);
+  assert.match(await firstSheet(page).locator('.ymd').textContent(), /2026[\s\S]*11[\s\S]*8/);
+  assert.match(await firstSheet(page).locator('footer').textContent(), /본 양식의 무단 복제 및 사용을 금합니다/);
+  assert.equal(await firstSheet(page).locator('h1').textContent(), '데일리 묵상 노트');
+  assert.equal(await firstSheet(page).locator('.sheep svg').count(), 1, 'sheep drawn');
+  assert.equal(await sheets(page).count(), 1, 'short note fits on one page');
+  assert.match(await page.getByTestId('page-count').textContent(), /1/);
   assert.deepEqual(errors, []);
   await ctx.close();
 });
 
-test('overflow warning appears for long text and disappears when shortened', T, async () => {
+test('long multi-line text grows the box instead of being cut; long one-line text still warns', T, async () => {
   const { ctx, page } = await open();
   await page.getByTestId('new-devotion').click();
-  const wrap = page.locator('[data-field-wrap="thanks"]');
-  await page.locator('[name="thanks"]').fill('짧은 감사');
-  await page.waitForTimeout(400);
-  assert.equal(await wrap.evaluate(e => e.classList.contains('is-over')), false);
-  await page.locator('[name="thanks"]').fill('하나님께서 오늘도 함께하심을 감사드립니다. '.repeat(12));
-  await page.waitForTimeout(400);
-  assert.equal(await wrap.evaluate(e => e.classList.contains('is-over')), true);
-  assert.equal(await page.getByTestId('overflow-thanks').isVisible(), true);
-  await page.locator('[name="thanks"]').fill('짧은 감사');
-  await page.waitForTimeout(400);
-  assert.equal(await wrap.evaluate(e => e.classList.contains('is-over')), false);
+  const long = '하나님께서 오늘도 함께하심을 감사드립니다. '.repeat(12).trim();
+  await page.locator('[name="thanks"]').fill(long);
+  await settle(page);
+  assert.equal(await page.locator('[data-field-wrap="thanks"]').evaluate(e => e.classList.contains('is-over')), false, 'no warning: the box grows');
+  assert.equal(squash(await fieldText(page, 'thanks')), squash(long), 'every character is on the sheet');
+  const grown = await firstSheet(page).locator('[data-field="thanks"]').first().evaluate(e => e.closest('.lines').querySelectorAll('.ln').length);
+  assert.ok(grown > 3, `thanks box grew to ${grown} lines`);
+  await page.locator('[name="hymn"]').fill('주 안에 있는 나에게 딴 근심 있으랴 십자가 밑에 나아가 내 짐을 풀었네 '.repeat(3));
+  await settle(page);
+  assert.equal(await page.locator('[data-field-wrap="hymn"]').evaluate(e => e.classList.contains('is-over')), true, 'one-line field warns');
+  assert.equal(await page.getByTestId('overflow-hymn').isVisible(), true);
+  await page.locator('[name="hymn"]').fill('주 안에 있는 나에게');
+  await settle(page);
+  assert.equal(await page.locator('[data-field-wrap="hymn"]').evaluate(e => e.classList.contains('is-over')), false);
   await ctx.close();
 });
 
-test('PDF download produces a one-page A4 PDF under 3 MB', T, async () => {
+test('very long devotion continues on extra pages in print and PDF, without losing text', T, async () => {
+  const { ctx, page, errors } = await open();
+  await page.getByTestId('new-devotion').click();
+  await page.locator('[name="date"]').fill('2026-11-08');
+  const long = '주님의 은혜가 오늘도 넘칩니다. '.repeat(70) + 'ENDMARKTHANKS';
+  await page.locator('[name="thanks"]').fill(long);
+  await page.locator('[name="action.0.text"]').fill('ACTIONMARK');
+  await settle(page);
+  const n = await sheets(page).count();
+  assert.ok(n >= 2, `pages in preview: ${n}`);
+  assert.match(await page.getByTestId('page-count').textContent(), new RegExp(String(n)));
+  assert.equal(squash(await fieldText(page, 'thanks')), squash(long), 'split across pages without losing text');
+  assert.match(await sheets(page).nth(1).locator('header').textContent(), /데일리 묵상 노트/, 'continuation header');
+  assert.match(await sheets(page).nth(1).textContent(), /\(계속\)/, 'continued section is marked');
+  // print
+  await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
+  await page.getByTestId('btn-print').click();
+  await page.waitForFunction(() => window.__printed === true, null, { timeout: 10_000 });
+  const pfile = path.join(TMP, 'long-print.pdf');
+  await page.pdf({ path: pfile, preferCSSPageSize: true, printBackground: true });
+  assert.equal(pdfPages(pfile), n, 'printed pages = preview pages');
+  const text = execFileSync('pdftotext', [pfile, '-']).toString();
+  assert.match(text, /ENDMARKTHANKS/);
+  assert.match(text, /ACTIONMARK/);
+  // PDF download
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 90_000 }), page.getByTestId('btn-pdf').click()]);
+  const dfile = path.join(TMP, 'long-dl.pdf');
+  await dl.saveAs(dfile);
+  assert.equal(pdfPages(dfile), n, 'downloaded PDF pages = preview pages');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('free note adds pages automatically when the body is long', T, async () => {
+  const { ctx, page } = await open();
+  await page.getByTestId('new-free').click();
+  await page.locator('[name="title"]').fill('수련회 메모');
+  const body = Array.from({ length: 70 }, (_, i) => `${i + 1}번째 줄 메모입니다`).join('\n') + '\nLASTLINEMARK';
+  await page.locator('[name="body"]').fill(body);
+  await settle(page);
+  const n = await sheets(page).count();
+  assert.ok(n >= 3, `free note pages: ${n}`);
+  assert.equal(squash(await fieldText(page, 'body')), squash(body));
+  assert.match(await sheets(page).last().locator('footer').textContent(), new RegExp(`${n}\\s*/\\s*${n}`), 'page numbers');
+  await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
+  await page.getByTestId('btn-print').click();
+  await page.waitForFunction(() => window.__printed === true, null, { timeout: 10_000 });
+  const pfile = path.join(TMP, 'free-print.pdf');
+  await page.pdf({ path: pfile, preferCSSPageSize: true, printBackground: true });
+  assert.equal(pdfPages(pfile), n);
+  assert.match(execFileSync('pdftotext', [pfile, '-']).toString(), /LASTLINEMARK/);
+  await ctx.close();
+});
+
+test('PC: the preview appears only after pressing the button', T, async () => {
+  const { ctx, page } = await open();
+  await page.getByTestId('new-devotion').click();
+  await page.locator('[name="thanks"]').fill('미리보기 확인');
+  await settle(page);
+  assert.equal(await page.getByTestId('preview').isVisible(), false, 'hidden at first');
+  const formBox = await page.getByTestId('form').boundingBox();
+  assert.ok(formBox.width >= 600, `form uses the screen (${formBox.width}px)`);
+  await page.getByTestId('btn-preview').click();
+  await page.getByTestId('preview').waitFor({ state: 'visible' });
+  const box = await firstSheet(page).boundingBox();
+  assert.ok(box.width > 400 && box.x >= 0, `sheet visible (${box.width}px)`);
+  await page.getByTestId('btn-preview-close').click();
+  await page.getByTestId('preview').waitFor({ state: 'hidden' });
+  await ctx.close();
+});
+
+test('PDF download produces a one-page A4 PDF under 3 MB for a short note', T, async () => {
   const { ctx, page, errors } = await open();
   await page.getByTestId('new-devotion').click();
   await page.locator('[name="date"]').fill('2026-11-08');
@@ -111,10 +194,10 @@ test('print layout: only the sheet is printed, on one A4 page', T, async () => {
   await page.locator('[name="prayer"]').fill('교회와 가족을 위해 기도합니다');
   await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
   await page.getByTestId('btn-print').click();
-  await page.waitForFunction(() => window.__printed === true, null, { timeout: 10_000 }); // 글꼴 준비 후 인쇄 창을 연다
+  await page.waitForFunction(() => window.__printed === true, null, { timeout: 10_000 });
   const file = path.join(TMP, 'print.pdf');
   await page.pdf({ path: file, preferCSSPageSize: true, printBackground: true });
-  assert.match(execFileSync('pdfinfo', [file]).toString(), /Pages:\s+1/);
+  assert.equal(pdfPages(file), 1);
   const text = execFileSync('pdftotext', [file, '-']).toString();
   assert.match(text, /교회와 가족을 위해 기도합니다/);
   assert.doesNotMatch(text, /PDF 저장|미리보기/, 'app buttons are not printed');
@@ -141,9 +224,10 @@ test('language switch changes the sheet and the UI', T, async () => {
     await page.locator('select[name="lang"]').selectOption(lang);
     await page.getByTestId('btn-back').click();
     await page.getByTestId('new-devotion').click();
-    assert.equal(await sheet(page).locator('h1').innerText(), title, lang);
+    await settle(page);
+    assert.equal(await firstSheet(page).locator('h1').textContent(), title, lang);
     assert.match(await page.getByTestId('btn-pdf').innerText(), new RegExp(pdfLabel));
-    assert.equal(await sheet(page).getAttribute('lang'), lang === 'zh' ? 'zh-CN' : lang);
+    assert.equal(await firstSheet(page).getAttribute('lang'), lang === 'zh' ? 'zh-CN' : lang);
     await page.getByTestId('btn-back').click();
   }
   await ctx.close();
@@ -160,19 +244,20 @@ test('worship and free notes render their fields', T, async () => {
   await page.locator('[name="sermon"]').fill('열매는 머무름에서 나온다');
   await page.locator('[name="apply.1.text"]').fill('매일 10분 말씀 읽기');
   await page.locator('[name="prayer_inter"]').fill('선교사님들');
-  await page.waitForTimeout(400);
-  assert.equal(await sheet(page).locator('[data-opt="sun"].on').count(), 1);
-  assert.equal(await sheet(page).locator('[data-opt="dawn"].on').count(), 0);
-  assert.match(await field(page, 'service_other').innerText(), /청년부/);
+  await settle(page);
+  assert.equal(await firstSheet(page).locator('[data-opt="sun"].on').count(), 1);
+  assert.equal(await firstSheet(page).locator('[data-opt="dawn"].on').count(), 0);
+  assert.match(await fieldText(page, 'service_other'), /청년부/);
   for (const [id, re] of [['preacher', /김목사/], ['sermon_keywords', /포도나무/], ['sermon', /머무름/], ['apply', /10분/], ['prayer_inter', /선교사/]])
-    assert.match(await field(page, id).innerText(), re, id);
+    assert.match(await fieldText(page, id), re, id);
+  assert.equal(await sheets(page).count(), 1);
   await page.getByTestId('btn-back').click();
   await page.getByTestId('new-free').click();
   await page.locator('[name="title"]').fill('수련회 메모');
   await page.locator('[name="body"]').fill('첫째 날: 찬양과 말씀');
-  await page.waitForTimeout(400);
-  assert.match(await field(page, 'title').innerText(), /수련회 메모/);
-  assert.match(await field(page, 'body').innerText(), /찬양과 말씀/);
+  await settle(page);
+  assert.match(await fieldText(page, 'title'), /수련회 메모/);
+  assert.match(await fieldText(page, 'body'), /찬양과 말씀/);
   assert.deepEqual(errors, []);
   await ctx.close();
 });
@@ -201,9 +286,10 @@ test('mobile viewport: form is usable and the preview fits the screen', T, async
   const docWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(docWidth <= viewport.width + 1, `no horizontal scroll (${docWidth})`);
   await page.getByTestId('btn-preview').click();
-  const box = await sheet(page).boundingBox();
+  await page.getByTestId('preview').waitFor({ state: 'visible' });
+  const box = await firstSheet(page).boundingBox();
   assert.ok(box.width <= viewport.width + 1 && box.width > viewport.width * 0.8, `sheet width ${box.width}`);
-  assert.match(await field(page, 'thanks').innerText(), /모바일에서/);
+  assert.match(await fieldText(page, 'thanks'), /모바일에서/);
   await ctx.close();
 });
 
@@ -228,8 +314,8 @@ test('offline: the app opens and works after the first visit', T, async () => {
   await page.reload();
   await page.getByTestId('new-devotion').click();
   await page.locator('[name="thanks"]').fill('오프라인 감사');
-  await page.waitForTimeout(400);
-  assert.match(await field(page, 'thanks').innerText(), /오프라인 감사/);
+  await settle(page);
+  assert.match(await fieldText(page, 'thanks'), /오프라인 감사/);
   await ctx.close();
 });
 
