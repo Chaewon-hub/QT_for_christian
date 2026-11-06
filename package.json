@@ -1,0 +1,12 @@
+{
+  "name": "qt-note",
+  "version": "1.0.0",
+  "private": true,
+  "description": "교인용 묵상·예배 노트 웹앱 (입력 → 인쇄 / PDF 저장). 정적 파일만으로 동작하며 GitHub Pages에 그대로 배포합니다.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/unit/*.test.mjs\"",
+    "test:e2e": "node --test --test-concurrency=1 \"tests/e2e/*.test.mjs\"",
+    "serve": "node -e \"import('./tests/e2e/server.mjs').then(async m => { const s = await m.startServer(process.cwd()); console.log(s.url); })\""
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>QT Note</title>
+  <meta name="description" content="묵상·예배 노트를 쓰고 A4로 인쇄하거나 PDF로 보관하는 교인용 노트 앱">
+  <meta name="theme-color" content="#F5F2EC">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="QT Note">
+  <link rel="stylesheet" href="assets/fonts/fonts.css">
+  <link rel="stylesheet" href="css/sheet.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body data-theme="a">
+  <noscript>이 앱은 JavaScript가 필요합니다. / JavaScript is required.</noscript>
+  <main id="app"></main>
+  <div id="print-root" aria-hidden="true"></div>
+  <div id="modal-root"></div>
+  <div id="toast" data-testid="toast" role="status" hidden></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

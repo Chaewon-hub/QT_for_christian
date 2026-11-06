@@ -1,0 +1,132 @@
+/* A4 노트 시트 디자인 (미리보기·인쇄·PDF 공통). 단위는 mm/pt로 고정. */
+.sheet {
+  --line-h: 8mm;
+  --body-font: 'Pretendard';
+  --title-font: 'Pretendard'; --title-weight: 800; --title-track: -0.035em;
+  --mono: 'Space Mono';
+  width: 210mm; height: 297mm; padding: 13mm 14mm 11mm;
+  display: flex; flex-direction: column; gap: 4.2mm;
+  position: relative; overflow: hidden; box-sizing: border-box;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body-font), 'Pretendard', 'Hiragino Sans', 'Yu Gothic', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK KR', sans-serif;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  text-align: left; line-height: normal;
+}
+.sheet *, .sheet *::before, .sheet *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+.sheet[data-theme="a"] { --bg:#F5F2EC; --ink:#2B2A28; --muted:#736D66; --line:#D3CCC1; --soft:#ECE5DA; --accent:#C2603A; --on-accent:#FFFFFF; --sun-day:#C2603A; }
+.sheet[data-theme="b"] { --bg:#FAF6EA; --ink:#1D2A47; --muted:#646B7D; --line:#D7CFB9; --soft:#F0E8D2; --accent:#D39C2C; --on-accent:#1D2A47; --sun-day:#B57F14;
+  --title-font:'Hahmlet'; --title-weight:700; --title-track:-0.02em; --mono:'DM Mono'; }
+.sheet.print { --bg:#FFFFFF; --soft:#F3F1EC; }
+.sheet.print[data-theme="b"] { --soft:#F5F1E4; }
+
+/* 언어별 글꼴 */
+.sheet[lang="ja"] { --body-font:'Pretendard JP'; }
+.sheet[lang="ja"][data-theme="a"] { --title-font:'Pretendard JP'; }
+.sheet[lang="ja"][data-theme="b"] { --title-font:'Shippori Mincho'; --title-weight:800; --title-track:0; }
+.sheet[lang="zh-CN"] { --body-font:'PingFang SC'; font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans SC','Noto Sans CJK SC',sans-serif; }
+.sheet[lang="zh-CN"][data-theme="a"] { --title-font:'PingFang SC'; --title-weight:800; --title-track:-0.01em; }
+.sheet[lang="zh-CN"][data-theme="b"] { --title-font:'Songti SC'; --title-weight:700; --title-track:0; }
+.sheet[lang="zh-CN"] h1 { font-family: var(--title-font), 'STSong', 'SimSun', 'Noto Serif SC', 'Noto Serif CJK SC', 'PingFang SC', 'Microsoft YaHei', serif; }
+.sheet[lang="zh-CN"][data-theme="a"] h1 { font-family: 'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans SC','Noto Sans CJK SC',sans-serif; }
+.sheet[lang="en"] .en, .sheet[lang="en"] .strip small { display: none; }
+.sheet[lang="en"] h1 { letter-spacing: -0.02em; }
+
+/* 헤더 */
+.sheet header { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: end;
+  padding-bottom: 3.2mm; border-bottom: 1.3pt solid var(--ink); }
+.sheet[data-theme="b"] header { border-bottom: 3.2pt double var(--ink); }
+.sheet .eyebrow { font-family: var(--mono), monospace; font-size: 7.6pt; letter-spacing: 0.18em; color: var(--accent);
+  text-transform: uppercase; margin-bottom: 1.6mm; white-space: nowrap; }
+.sheet[data-theme="b"] .eyebrow { color: var(--ink); }
+.sheet .eyebrow b { font-weight: inherit; color: var(--muted); letter-spacing: 0.1em; }
+.sheet h1 { font-family: var(--title-font), 'Pretendard', serif; font-weight: var(--title-weight); font-size: 27pt; line-height: 1.05;
+  letter-spacing: var(--title-track); white-space: nowrap; }
+.sheet .sub { font-size: 9.6pt; color: var(--muted); margin-top: 2mm; line-height: 1.45; max-width: 94mm; }
+.sheet .sheep { position: absolute; right: 60mm; bottom: 0; width: 27mm; height: 27mm; }
+.sheet .sheep svg { display: block; width: 100%; height: 100%; }
+.sheet .date { width: 56mm; }
+.sheet .date .lbl { font-family: var(--mono), monospace; font-size: 7pt; letter-spacing: 0.16em; color: var(--muted); }
+.sheet .ymd { display: flex; align-items: flex-end; gap: 1.2mm; margin-top: 1mm; font-family: var(--mono), monospace; font-size: 11pt; }
+.sheet .ymd .f { border-bottom: 0.7pt solid var(--ink); height: 6.4mm; display: inline-block; font-size: 10pt; color: var(--ink);
+  padding-left: 0.8mm; line-height: 6.4mm; }
+.sheet .ymd .y { width: 17mm; } .sheet .ymd .m, .sheet .ymd .d { width: 11mm; }
+.sheet .days { display: flex; gap: 1.25mm; margin-top: 2.4mm; }
+.sheet .days span { width: 6.6mm; height: 6.6mm; border: 0.6pt solid var(--line); border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 8pt; font-weight: 700; color: var(--ink); }
+.sheet .days span.sun { color: var(--sun-day); }
+.sheet .days span.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* 섹션 */
+.sheet section { display: flex; flex-direction: column; min-width: 0; }
+.sheet section.fill { flex: 1; min-height: 0; }
+.sheet .fill > .lines { flex: 1; min-height: 0; }
+.sheet .sh { display: flex; align-items: baseline; gap: 2.2mm; height: 7.4mm; white-space: nowrap; min-width: 0; }
+.sheet .num { font-family: var(--mono), monospace; font-size: 8.5pt; font-weight: 700; color: var(--accent); }
+.sheet[data-theme="b"] .num { width: 5.4mm; height: 5.4mm; border-radius: 50%; background: var(--accent); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 7.6pt; font-weight: 500; align-self: center; }
+.sheet .ttl { font-size: 12.2pt; font-weight: 700; letter-spacing: -0.01em; }
+.sheet .guide { font-size: 8.6pt; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.sheet .en { margin-left: auto; font-family: var(--mono), monospace; font-size: 6.8pt; letter-spacing: 0.16em; color: var(--muted); text-transform: uppercase; }
+.sheet .field { margin-left: auto; display: flex; align-items: baseline; gap: 2mm; font-size: 9pt; font-weight: 700; }
+.sheet .field i { display: inline-block; width: 50mm; border-bottom: 0.7pt solid var(--ink); height: 4.6mm; font-style: normal; font-weight: 400;
+  font-size: 9.6pt; line-height: 4.4mm; white-space: nowrap; overflow: hidden; padding-left: 1mm; }
+
+.sheet .lines { display: flex; flex-direction: column; border-top: 0.8pt solid var(--ink); position: relative; }
+.sheet .ln { height: var(--line-h); border-bottom: 0.6pt solid var(--line); flex: none; position: relative; }
+.sheet .ln.chk::before { content: ''; position: absolute; left: 0.6mm; bottom: 1.8mm; width: 3.6mm; height: 3.6mm;
+  border: 0.7pt solid var(--muted); border-radius: 0.8mm; }
+.sheet .ln.chk.done::before { background: var(--accent); border-color: var(--accent); }
+.sheet .ln.chk.done::after { content: ''; position: absolute; left: 1.9mm; bottom: 2.6mm; width: 1.1mm; height: 2.2mm;
+  border: solid var(--on-accent); border-width: 0 0.45mm 0.45mm 0; transform: rotate(45deg); }
+.sheet .lines.kw::after { content: ''; position: absolute; top: 0; bottom: 0; left: 30mm; border-left: 0.6pt dashed var(--line); }
+.sheet .lines.margin { border-top: none; }
+.sheet .lines.margin::after { content: ''; position: absolute; top: 0; bottom: 0; left: 11mm; border-left: 0.6pt dashed var(--line); }
+
+/* 입력한 글자 (줄 위에 놓이도록 1.3mm 내림) */
+.sheet .txt { position: absolute; left: 0; right: 0; top: 1.3mm; height: 100%; overflow: hidden; padding: 0 1mm;
+  font-size: 10.5pt; line-height: var(--line-h); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.sheet[lang="ko"] .txt { word-break: keep-all; }
+.sheet .txt.kwcol { right: auto; width: 29mm; font-size: 9.6pt; }
+.sheet .txt.main { left: 31.5mm; }
+.sheet .lines.margin .txt { left: 12.5mm; }
+.sheet .one { white-space: nowrap; overflow: hidden; }
+.sheet .ln.chk .one { position: absolute; left: 6.4mm; right: 1mm; bottom: 1.2mm; font-size: 10.5pt; line-height: 1.3; }
+
+.sheet .row2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; }
+
+/* 찬양·한 줄 요약 */
+.sheet .strip { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 3mm; height: 10mm; flex: none;
+  background: var(--soft); border-radius: 5mm; padding: 0 5mm 0 4mm; }
+.sheet .strip .lab { display: flex; align-items: center; gap: 2mm; font-size: 10.4pt; font-weight: 700; white-space: nowrap; }
+.sheet .strip .lab svg { width: 4.4mm; height: 4.4mm; }
+.sheet .strip .lab small { font-family: var(--mono), monospace; font-size: 6.6pt; font-weight: 400; letter-spacing: .14em; color: var(--muted); }
+.sheet .strip .bar { border-bottom: 0.6pt solid var(--line); height: 6mm; font-size: 10pt; line-height: 6mm; padding-left: 1mm; }
+
+/* 예배 정보 표 */
+.sheet .info { display: grid; grid-template-columns: 22mm 1fr 20mm 48mm; border-top: 0.8pt solid var(--ink); border-bottom: 0.8pt solid var(--ink); flex: none; }
+.sheet .info.topic { grid-template-columns: 22mm 1fr; }
+.sheet .info > div { height: 10mm; display: flex; align-items: center; border-bottom: 0.6pt solid var(--line); padding: 0 3mm; font-size: 10pt; min-width: 0; }
+.sheet .info > div.k { background: var(--soft); font-weight: 700; font-size: 9.6pt; justify-content: center; padding: 0 1.5mm; text-align: center; line-height: 1.15; }
+.sheet .info > div.last { border-bottom: none; }
+.sheet .info .span3 { grid-column: span 3; }
+.sheet .info > div.v { display: block; line-height: 10mm; }
+.sheet .checks { display: flex; gap: 4.2mm; font-size: 10pt; white-space: nowrap; }
+.sheet .checks > span { display: flex; align-items: center; gap: 1.3mm; position: relative; }
+.sheet .checks > span::before { content: ''; width: 3.4mm; height: 3.4mm; border: 0.7pt solid var(--muted); border-radius: 0.7mm; flex: none; }
+.sheet .checks > span.on::before { background: var(--accent); border-color: var(--accent); }
+.sheet .checks > span.on::after { content: ''; position: absolute; left: 1.2mm; top: 50%; margin-top: -1.5mm; width: 1mm; height: 2mm;
+  border: solid var(--on-accent); border-width: 0 0.45mm 0.45mm 0; transform: rotate(45deg); }
+.sheet .checks em { font-style: normal; color: var(--muted); display: inline-flex; align-items: center; }
+.sheet .checks em i { display: inline-block; font-style: normal; color: var(--ink); width: 24mm; padding: 0 1mm; }
+
+/* 기도 표 */
+.sheet .pray { display: grid; grid-template-columns: 34mm 1fr; border-top: 0.8pt solid var(--ink); }
+.sheet .pray .k { background: var(--soft); border-bottom: 0.6pt solid var(--bg); display: flex; flex-direction: column; justify-content: center;
+  padding: 0 3.5mm; font-size: 10pt; font-weight: 700; line-height: 1.3; }
+.sheet .pray .k small { font-size: 8pt; font-weight: 400; color: var(--muted); }
+.sheet .pray .v { position: relative; margin-left: 3mm; }
+
+.sheet footer { display: flex; justify-content: space-between; align-items: center; gap: 4mm; border-top: 0.6pt solid var(--line); padding-top: 2.2mm; flex: none; }
+.sheet footer .copy { font-size: 7.6pt; font-weight: 700; white-space: nowrap; }
+.sheet footer .note { font-size: 7.4pt; color: var(--muted); text-align: right; }
